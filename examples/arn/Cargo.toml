@@ -1,0 +1,9 @@
+[package]
+    name        = "arn"
+    edition     = "2024"
+
+[dependencies]
+    npc_maker   = {path = "../../rust"}
+    ndarray     = {version = "0.16", features = ["serde"]}
+    serde       = {version = "1.0", features = ["derive"]}
+    serde_json  = {version = "1.0"}
