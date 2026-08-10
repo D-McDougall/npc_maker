@@ -8,6 +8,5 @@
 
 [dependencies]
     npc_maker           = { path = "../../rust/" }
-    process_anywhere    = { version = "0.3" }
     serde               = { version = "1.0" }
     serde_json          = { version = "1.0" }
