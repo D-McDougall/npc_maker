@@ -324,7 +324,24 @@ pub enum Replacement {
 ///
 pub type Selection = dyn Fn(&[Arc<Mutex<Individual>>], usize) -> Vec<Vec<Arc<Mutex<Individual>>>> + Send + Sync;
 
-/// Individuals may have custom scores functions with this type signature.
+fn default_selection(population_size: usize, score: Arc<Score>) -> Arc<Selection> {
+    const MEDIAN_PERCENT: f64 = 0.1;
+    let median = (population_size as f64 * MEDIAN_PERCENT).round() as usize;
+    Arc::new(move |population, spawn| {
+        let rng = &mut rand::rng();
+        let scores: Vec<f64> = population
+            .iter()
+            .map(|individual| score(&individual.lock().unwrap()))
+            .collect();
+        let index = mate_selection::RankedExponential(median).pairs(rng, spawn, scores);
+        index
+            .iter()
+            .map(|parents| parents.iter().map(|&i| population[i].clone()).collect())
+            .collect()
+    })
+}
+
+/// Individuals may have custom score functions with this type signature.
 ///
 /// By default the npc_maker will parse the individual's score field into a single
 /// floating point number, with a default of `-inf` for missing or invalid scores.
@@ -463,23 +480,8 @@ impl Evolution {
         //
         let score = score.unwrap_or_else(|| Arc::new(default_score));
         //
-        let selection = selection.unwrap_or_else(|| {
-            const MEDIAN_PERCENT: f64 = 0.1;
-            let median = (population_size as f64 * MEDIAN_PERCENT).round() as usize;
-            let score_fn = score.clone();
-            Arc::new(move |population, spawn| {
-                let rng = &mut rand::rng();
-                let scores: Vec<f64> = population
-                    .iter()
-                    .map(|individual| score_fn(&individual.lock().unwrap()))
-                    .collect();
-                let index = mate_selection::RankedExponential(median).pairs(rng, spawn, scores);
-                index
-                    .iter()
-                    .map(|parents| parents.iter().map(|&i| population[i].clone()).collect())
-                    .collect()
-            })
-        });
+        let selection = selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
+        //
         let mut this = Evolution {
             path,
             replacement: replacement.unwrap_or(Replacement::Generation),

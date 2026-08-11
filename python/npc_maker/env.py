@@ -607,9 +607,9 @@ class Environment:
         controller[0] = str(controller[0]) # Convert Path to String
         phenome = individual.get_phenome()
         metadata = {
-            "name": self.name,
+            "name": individual.name,
             "body_type": body_type,
-            "parents": self.parents,
+            "parents": individual.parents,
             "controller": controller,
             "genome": len(phenome),
         }

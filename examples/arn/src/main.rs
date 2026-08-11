@@ -6,21 +6,25 @@ use std::path::Path;
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct Genome {
+    /// Temperature
+    T: f64,
+
     /// Number of genes
     N: usize,
-
-    /// Weights matrix
-    W: Vec<f64>,
 
     /// Input gene names
     I: Vec<Vec<usize>>,
 
     /// Output gene names
     O: Vec<Vec<usize>>,
+
+    /// Weights matrix
+    W: Vec<f64>,
 }
 
 #[derive(Default)]
 struct RegulatoryNetwork {
+    temperature: f64,
     matrix: Array2<f64>,
     inputs: Vec<Vec<usize>>,
     outputs: Vec<Vec<usize>>,
@@ -35,8 +39,10 @@ impl RegulatoryNetwork {
 }
 impl API for RegulatoryNetwork {
     fn genome(&mut self, _environment: &Path, _population: &str, value: Box<[u8]>) {
-        let Genome { N, W, I, O } = serde_json::from_slice(&value).unwrap();
+        let Genome { T, N, I, O, W } = serde_json::from_slice(&value).unwrap();
         //
+        assert!(T >= 0.0);
+        self.temperature = T;
         self.state = Array1::from_elem(N, 1.0);
         self.inputs = I;
         self.outputs = O;
@@ -67,10 +73,10 @@ impl API for RegulatoryNetwork {
         let mut input_delta = Array1::<f64>::zeros(self.num_states());
         for (index, value) in self.queue.drain(..) {
             for gene_index in &self.inputs[index] {
-                input_delta[*gene_index] += dt * gamma * value
+                input_delta[*gene_index] += dt * self.temperature * value
             }
         }
-        let state_delta = dt * gamma * &self.state * self.matrix.dot(&self.state);
+        let state_delta = dt * self.temperature * &self.state * self.matrix.dot(&self.state);
         self.state = &self.state + state_delta + input_delta;
         for x in &mut self.state {
             *x = x.max(0.0);
