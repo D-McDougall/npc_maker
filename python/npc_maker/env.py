@@ -222,7 +222,7 @@ def _help_message(env_spec):
     if desc:
         message += desc + "\n\n"
 
-    # Summary of populations.
+    # Summary of body_types.
     pass
 
     # Summary of command line arguments.
@@ -338,15 +338,15 @@ def _try_print(*args, **kwargs):
         else:
             raise
 
-def spawn(population=None):
+def spawn(body_type=None):
     """
-    Request a new individual from this population's evolution API.
+    Request a new individual from this body_type's evolution API.
 
-    Argument population is optional if the environment has exactly one population.
+    Argument body_type is optional if the environment has exactly one body_type.
     """
-    if population is not None:
-        population = str(population)
-    _try_print(json.dumps({"Spawn": population}))
+    if body_type is not None:
+        body_type = str(body_type)
+    _try_print(json.dumps({"Spawn": body_type}))
 
 def mate(*parents):
     """
@@ -389,7 +389,7 @@ def death(name):
 class SoloAPI:
     """
     Abstract class for implementing environments which contain exactly one
-    individual at a time. The environment must have exactly one population.
+    individual at a time. The environment must have exactly one body_type.
     """
     def __init__(self, env_spec, mode, **settings):
         """
@@ -451,13 +451,13 @@ class SoloAPI:
         """
         import npc_maker.ctrl
         env_spec, mode, settings = get_args()
-        assert len(env_spec["populations"]) == 1
+        assert len(env_spec["body_types"]) == 1
         self = cls(env_spec, mode, **settings)
-        population = env_spec["populations"][0]["name"]
+        body_type = env_spec["body_types"][0]["name"]
         controller = None
         # 
         while True:
-            spawn(population)
+            spawn(body_type)
             try:
                 individual = input()
             except EOFError:
@@ -466,7 +466,7 @@ class SoloAPI:
             command    = individual["controller"]
             # Start a new controller process.
             if controller is None or not controller.same_command(command):
-                controller = npc_maker.ctrl.Controller(env_spec, population, command)
+                controller = npc_maker.ctrl.Controller(env_spec, body_type, command)
             assert controller.is_alive()
             controller.genome(individual["genome"])
             score(name, self.evaluate(name, controller))
@@ -569,17 +569,17 @@ class Environment:
         except BrokenPipeError:
             pass
 
-    def _get_population(self, population):
+    def _get_body_type(self, body_type):
         """
-        Clean the population argument and fill in its default value.
+        Clean the body_type argument and fill in its default value.
         """
-        if not population:
-            all_populations = self._env_spec["populations"]
-            if len(all_populations) == 1:
-                population = all_populations[0]["name"]
+        if not body_type:
+            all_body_types = self._env_spec["body_types"]
+            if len(all_body_types) == 1:
+                body_type = all_body_types[0]["name"]
             else:
-                raise ValueError("missing population")
-        return str(population)
+                raise ValueError("missing body_type")
+        return str(body_type)
 
     def _get_name(self, name):
         """
@@ -598,9 +598,9 @@ class Environment:
         Does not flush.
         """
         # First package up this individual for sending it to an environment.
-        population = individual.population
-        if population is None:
-            population = ""
+        body_type = individual.body_type
+        if body_type is None:
+            body_type = ""
         controller = individual.get_controller()
         if not controller:
             raise ValueError("missing controller")
@@ -608,7 +608,7 @@ class Environment:
         phenome = individual.get_phenome()
         metadata = {
             "name": self.name,
-            "population": population,
+            "body_type": body_type,
             "parents": self.parents,
             "controller": controller,
             "genome": len(phenome),
@@ -641,7 +641,7 @@ class Environment:
 
         # Fill in missing fields.
         if "Spawn" in message:
-            message["Spawn"] = self._get_population(message["Spawn"])
+            message["Spawn"] = self._get_body_type(message["Spawn"])
         elif "Score" in message or "Telemetry" in message:
             message["name"] = self._get_name(message["name"])
         elif "Death" in message:
@@ -670,9 +670,9 @@ class Environment:
 
         return message
 
-    def evolve(self, populations):
+    def evolve(self, body_types):
         """
-        Argument populations is a dict of evolution API instances, indexed by population name.
+        Argument body_types is a dict of evolution API instances, indexed by body_type name.
 
         Returns either None or an Individual if one was just born or died.
         """
@@ -682,9 +682,9 @@ class Environment:
 
         if "Spawn" in message:
             pop_name   = message["Spawn"]
-            individual = populations[pop_name].spawn()
-            if not individual.get_population():
-                individual.population = pop_name
+            individual = body_types[pop_name].spawn()
+            if not individual.get_body_type():
+                individual.body_type = pop_name
             self.birth(individual)
             return individual
 
@@ -697,8 +697,8 @@ class Environment:
 
         elif "Death" in message:
             individual = message["Death"]
-            pop_name   = self._get_population(individual.get_population())
-            populations[pop_name].death(individual)
+            pop_name   = self._get_body_type(individual.get_body_type())
+            body_types[pop_name].death(individual)
             return individual
 
         else:

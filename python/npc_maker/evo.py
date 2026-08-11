@@ -125,7 +125,7 @@ class Individual:
     def __init__(self, genome, *,
                 name=None,
                 environment=None,
-                population=None,
+                body_type=None,
                 controller=None,
                 score=None,
                 telemetry={},
@@ -141,7 +141,7 @@ class Individual:
                 **extra):
         self.name           = str(name)         if name is not None else str(uuid.uuid4())
         self.environment    = str(environment)  if environment is not None else None
-        self.population     = str(population)   if population is not None else None
+        self.body_type      = str(body_type)    if body_type is not None else None
         self.controller     = self._clean_ctrl_command(controller)
         self._genome        = genome
         self._genome_cls    = type(genome)
@@ -192,11 +192,11 @@ class Individual:
         """
         return self.environment
 
-    def get_population(self) -> str:
+    def get_body_type(self) -> str:
         """
-        Get the name of this individual's population.
+        Get the name of this individual's body_type.
         """
-        return self.population
+        return self.body_type
 
     def get_controller(self) -> list:
         """
@@ -362,7 +362,7 @@ class Individual:
         clone = Individual(clone_genome,
                 epigenome   = self.epigenome,
                 environment = self.environment,
-                population  = self.population,
+                body_type   = self.body_type,
                 species     = self.species,
                 controller  = self.controller,
                 generation  = self.generation + 1,
@@ -397,7 +397,7 @@ class Individual:
         # 
         child = Individual(child_genome,
                 environment = self.environment,
-                population  = self.population,
+                body_type   = self.body_type,
                 species     = species,
                 controller  = self.controller,
                 generation  = max(self.generation, other.generation) + 1,
@@ -444,7 +444,7 @@ class Individual:
         if self.name is not None:        data["name"]        = self.name
         if self.ascension is not None:   data["ascension"]   = self.ascension
         if self.environment is not None: data["environment"] = self.environment
-        if self.population is not None:  data["population"]  = self.population
+        if self.body_type is not None:   data["body_type"]   = self.body_type
         if self.controller is not None:  data["controller"]  = self.controller
         if self.score is not None:       data["score"]       = self.score
         if self.birth_date is not None:  data["birth_date"]  = self.birth_date

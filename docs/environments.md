@@ -49,11 +49,11 @@ body types here.
 
 | Attribute | JSON Type | Default Value | Description |
 | :-------- | :-------: | :------------ | :---------- |
-| `"name"` | String | Required | Name of the population, must be unique within the environment |
+| `"name"` | String | Required | Name of the body_type, must be unique within the environment |
 | `"description"` | String | `""` | User facing documentation message |
 | `"sensors"` | Array of Interfaces | Required | Sensory inputs to this agent's body |
 | `"motors"` | Array of Interfaces | Required | Motor outputs from this agent's body |
-| Unspecified | Any |  | Environments may include extra information about this population |
+| Unspecified | Any |  | Environments may include extra information about this body_type |
 
 The "**sensors**" and "**motors**" arrays describe the connections between an
 agent's body in the environment and its control system. Both of these
@@ -149,7 +149,7 @@ information about the new individual:
 | Attribute | JSON Type | Description |
 | :-------- | :-------: | :---------- |
 | `"name"`        | String | Each individual is assigned a UUID for future reference |
-| `"population"`  | String | Name of the population that this individual belongs to  |
+| `"body_type"`   | String | Name of the body_type that this individual is born into |
 | `"parents"`     | List of Strings | The UUIDs of the parents. May be empty, especially if created by a "New" request |
 | `"controller"`  | List of Strings | Command line invocation of the controller program |
 | `"genome"`      | Number | Number of bytes in the genome |
@@ -163,8 +163,8 @@ Words in ALLCAPS are placeholders for runtime data.
 
 | Message Type | Message Format | Description |
 | :----------- | :------------- | :---------- |
-| Spawn | `{"Spawn":"POPULATION"}\n` | Request a new individual from the evolutionary algorithm |
-| Mate  | `{"Mate":["UUID","UUID"]}\n` | Request a new individual by mating individuals together. This requires at least one parent. This accepts more than two parents. All parents must be alive, in this environment, and members of the same population |
+| Spawn | `{"Spawn":"BODY_TYPE"}\n` | Request a new individual from the evolutionary algorithm |
+| Mate  | `{"Mate":["UUID","UUID"]}\n` | Request a new individual by mating individuals together. This requires at least one parent. This accepts more than two parents. All parents must be alive, in this environment, and members of the same body_type |
 | Score | `{"Score":"VALUE","name":"UUID"}\n` | Report the score or reproductive fitness of a living individual |
 | Telemetry | `{"Telemetry":{"KEY":"VALUE"},"name":"UUID"}\n` | The environment associates some extra information with a living individual. The info is kept alongside the individual in perpetuity |
 | Death | `{"Death":"UUID"}\n` | Report the death of an individual |

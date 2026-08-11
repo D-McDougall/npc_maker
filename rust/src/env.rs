@@ -356,7 +356,7 @@ pub struct Individual {
     pub name: String,
 
     #[serde(default)]
-    pub population: String,
+    pub body_type: String,
 
     #[serde(default)]
     pub parents: Vec<String>,
@@ -380,7 +380,7 @@ enum JsonMessage {
     /// Request a new individual from the evolutionary algorithm.
     Spawn {
         #[serde(rename = "Spawn")]
-        population: String,
+        body_type: String,
     },
 
     /// Request to mate two individuals.
@@ -415,10 +415,10 @@ enum JsonMessage {
 
 /// Request a new individual from the evolutionary algorithm.
 ///
-/// Argument population is optional (use empty string) if the environment
-/// contains exactly one population.
-pub fn spawn(population: &str) {
-    println!(r#"{{"Spawn":"{}"}}"#, population);
+/// Argument body_type is optional (use empty string) if the environment
+/// contains exactly one body_type.
+pub fn spawn(body_type: &str) {
+    println!(r#"{{"Spawn":"{}"}}"#, body_type);
 }
 
 /// Request to mate two specific individuals together to produce a child individual.
@@ -583,14 +583,14 @@ impl Environment {
         #[derive(Serialize)]
         struct Metadata<'a> {
             name: &'a str,
-            population: &'a str,
+            body_type: &'a str,
             parents: &'a [String],
             controller: &'a [String],
             genome: usize,
         }
         let metadata = Metadata {
             name: &individual.name,
-            population: &individual.population,
+            body_type: &individual.body_type,
             parents: &individual.parents,
             controller: &individual.controller,
             genome: phenome.len(),
@@ -619,12 +619,12 @@ impl Environment {
         let mut message: JsonMessage = serde_json::from_str(&line).unwrap();
         // Fill in missing fields.
         match &mut message {
-            JsonMessage::Spawn { population } => {
-                if population.is_empty() {
+            JsonMessage::Spawn { body_type } => {
+                if body_type.is_empty() {
                     if self.env_spec.body_types.len() == 1 {
-                        *population = self.env_spec.body_types[0].name.to_string();
+                        *body_type = self.env_spec.body_types[0].name.to_string();
                     } else {
-                        panic!("missing population");
+                        panic!("missing body_type");
                     }
                 }
             }
@@ -641,8 +641,8 @@ impl Environment {
         }
         // Check for missing/invalid names.
         match &message {
-            JsonMessage::Spawn { population } => {
-                assert!(self.env_spec.body_types.iter().any(|pop| &pop.name == population));
+            JsonMessage::Spawn { body_type } => {
+                assert!(self.env_spec.body_types.iter().any(|pop| &pop.name == body_type));
             }
             JsonMessage::Mate { parents } => {
                 assert!(self.outstanding.contains_key(&parents[0]));
@@ -672,7 +672,7 @@ impl Environment {
                 Ok(Some(Message::Death { individual }))
             }
             // Pass other messages through to user.
-            JsonMessage::Spawn { population } => Ok(Some(Message::Spawn { population })),
+            JsonMessage::Spawn { body_type } => Ok(Some(Message::Spawn { body_type })),
             JsonMessage::Mate { parents } => Ok(Some(Message::Mate { parents })),
         }
     }
@@ -689,7 +689,7 @@ impl Drop for Environment {
 #[non_exhaustive]
 pub enum Message {
     /// Request a new individual from the evolutionary algorithm.
-    Spawn { population: String },
+    Spawn { body_type: String },
 
     /// Request to mate two individuals.
     /// Both individuals must still be alive and in the environment.
@@ -731,14 +731,14 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Individual {
                 name: "1234".to_string(),
-                population: "pop1".to_string(),
+                body_type: "pop1".to_string(),
                 parents: vec!["1020".to_string(), "1077".to_string()],
                 controller: vec!["/usr/bin/q".to_string()],
                 genome: 456789,
                 extra: Default::default(),
             })
             .unwrap(),
-            r#"{"name":"1234","population":"pop1","parents":["1020","1077"],"controller":["/usr/bin/q"],"genome":456789}"#
+            r#"{"name":"1234","body_type":"pop1","parents":["1020","1077"],"controller":["/usr/bin/q"],"genome":456789}"#
         );
     }
 
@@ -747,14 +747,14 @@ mod tests {
     fn recv_string() {
         assert_eq!(
             serde_json::to_string(&JsonMessage::Spawn {
-                population: String::new()
+                body_type: String::new()
             })
             .unwrap(),
             r#"{"Spawn":""}"#
         );
         assert_eq!(
             serde_json::to_string(&JsonMessage::Spawn {
-                population: "pop1".to_string()
+                body_type: "pop1".to_string()
             })
             .unwrap(),
             r#"{"Spawn":"pop1"}"#

@@ -29,9 +29,9 @@ pub struct Individual {
     #[serde(default)]
     pub environment: String,
 
-    /// Name of the population that this individual belongs to.
+    /// Name of the body_type that this individual uses.
     #[serde(default)]
-    pub population: String,
+    pub body_type: String,
 
     /// Name or UUID of this individual's species.
     /// Mating may be restricted to individuals of the same species.
@@ -92,12 +92,12 @@ pub struct Individual {
 
 impl Individual {
     /// Create a new individual.
-    pub fn new(environment: &str, population: &str, controller: &[&str], genome: Box<[u8]>) -> Individual {
+    pub fn new(environment: &str, body_type: &str, controller: &[&str], genome: Box<[u8]>) -> Individual {
         Individual {
             name: uuid4(),
             ascension: None,
             environment: environment.to_string(),
-            population: population.to_string(),
+            body_type: body_type.to_string(),
             species: uuid4(),
             controller: controller.iter().map(|arg| arg.to_string()).collect(),
             genome: OnceLock::from(Arc::from(genome)),
@@ -137,7 +137,7 @@ impl Individual {
             name: uuid4(),
             ascension: None,
             environment: self.environment.clone(),
-            population: self.population.clone(),
+            body_type: self.body_type.clone(),
             species: self.species.clone(),
             controller: self.controller.clone(),
             genome: OnceLock::from(Arc::from(child_genome)),
@@ -162,7 +162,7 @@ impl Individual {
             name: uuid4(),
             ascension: None,
             environment: self.environment.clone(),
-            population: self.population.clone(),
+            body_type: self.body_type.clone(),
             species: self.species.clone(),
             controller: self.controller.clone(),
             genome: OnceLock::from(Arc::from(child_genome)),
