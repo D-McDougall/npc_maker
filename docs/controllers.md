@@ -28,7 +28,7 @@ messages the `[NUM]` and `[BYTES]` arguments form a binary array.
 |  Message Type | Message Format | Arguments | Description |
 | :------------ | :------------- | :-------- | ----------- |
 | Environment | `E[ENV_SPEC]\n` | `[ENV_SPEC]` is the filesystem path of the environment specification file | This message is always sent exactly once at the controller's startup, before any other messages |
-| Population | `P[POPULATION]\n` | `[POPULATION]` is a name and a key into the environment specification's "populations" table | This message is always sent exactly once at the controller's startup, before any other messages |
+| BodyType | `P[BODY_TYPE]\n` | `[BODY_TYPE]` is a name and a key into the environment specification's "body_types" table | This message is always sent exactly once at the controller's startup, before any other messages |
 | Genome | `G[NUM]\n[BYTES]` | The parameters for the new controller | Discard the current model and load a new one |
 | Reset | `R\n` |  | Reset the currently loaded model to it's initial state |
 | Advance | `A[DT]\n` | `[DT]` is the time period to advance over, measured in seconds | Advance the state of the controller |

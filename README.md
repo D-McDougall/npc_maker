@@ -3,16 +3,17 @@
 The NPC Maker is a framework for interacting with simulated environments that
 contain AI agents. It defines software interfaces that separate environments
 from their surrounding concerns, and provides APIs for using them.
-The framework also provides a collection of ready-to-use tools and environments.
+The NPC Maker also provides a collection of ready-to-use tools and environments.
 
-The framework consists of three major components:
+The framework consists of four major components:
 * [Simulated Environments](/docs/environments.md)
 * [Control Systems](/docs/controllers.md)
+* [Genetic Algorithms](/docs/genetics.md)
 * [Evolutionary Algorithms](/docs/evolution.md)
 
 The NPC Maker's API is implemented for both python and rust. Components
-(environments, controllers, and evolutionary algorithms) are isolated from each
-other so they can be implemented in different languages.
+(environments, controllers, genetic and evolutionary algorithms) are isolated
+in separate processes so they can be implemented in different languages.
 
 ## Python API
 

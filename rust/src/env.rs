@@ -271,11 +271,7 @@ impl From<bool> for Mode {
     /// Converts [false] to [Mode::Headless], \
     /// Converts [true] to [Mode::Graphical].
     fn from(mode: bool) -> Self {
-        if mode {
-            Mode::Graphical
-        } else {
-            Mode::Headless
-        }
+        if mode { Mode::Graphical } else { Mode::Headless }
     }
 }
 

@@ -8,7 +8,7 @@ The NPC Maker defines a standard interface for interacting with arbitrary enviro
 Environments always execute in a different computer process than the main
 program of the NPC Maker framework, which is referred to as
 the "**evolution**" program. This separation has many advantages, chiefly that
-user can create and control environments using the programming language of
+users can create and control environments using the programming language of
 their choice.
 
 Environments have two parts: a static description and an executable program.
