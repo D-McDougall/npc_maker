@@ -5,7 +5,8 @@ responsible for handling genomes.
 
 The word "**genome**" refers to a complete set of parameters for creating an
 AI agent. Each individual has exactly one immutable genome, which is appended
-to the individual's file, as described in [evolution.md].
+to the individual's file, as described in the chapter on
+[evolutionary algorithms](/docs/evolution.md).
 
 Genomes are treated as opaque binary objects outside of genetic algorithms.
 Genomes are converted into "**phenomes**" before transmission to controllers.
@@ -31,21 +32,21 @@ following structure:
 
 _command format:_ `["asex", "PARENT_PATH"]`
 
-This function asexually reproduces a genome. It should copy the given genome
+This function asexually reproduces an individual. It should copy the given genome
 and apply mutations.
 
 
 ### sex ###
 
-_command format:_ `["sex", "PARENT_1_PATH", "PARENT_2_PATH"]`
+_command format:_ `["sex", "PARENT_1_PATH", "PARENT_2_PATH", ...]`
 
-This function sexually reproduces two genomes. It should apply crossover and
-mutation to the given genomes.
+This function sexually reproduces the given individuals. This may receive more
+than two genomes. It should apply crossover and mutation to the given genomes.
 
 
 ### Non-Standard Commands ###
 
-Genetic algorithms may implement extra commands.
+Genetic algorithms may implement extra / custom commands.
 However, it is an error to invoke an undefined command.
 
 
@@ -58,6 +59,11 @@ Commands `asex` and `sex` return a genome-phenome pair, in the format:
 
 Which is immediately followed by two byte arrays, which must be read in binary mode.
 The values `GENOME` and `PHENOME` are integer array lengths, corresponding to the first and second arrays, respectively.
+
+---
+
+Custom commands return a single-line JSON object, containing any value.
+
 
 ## Standard Error Channel ##
 

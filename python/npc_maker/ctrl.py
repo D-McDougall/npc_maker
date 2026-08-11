@@ -117,7 +117,7 @@ class Controller:
         return self.command == _clean_ctrl_command(command)
 
     def __repr__(self):
-        return "<npc_maker.env_api.Instance: {}>".format(repr(self.get_command()))
+        return "<npc_maker.ctrl.Controller: {}>".format(repr(self.get_command()))
 
     def genome(self, value):
         """

@@ -13,16 +13,16 @@ pub trait API {
 
     fn sex(&mut self, parent_1: String, parent_2: String) -> (Vec<u8>, Vec<u8>);
 
-    /// Receive a custom message from the controller using a new message type.
+    /// Receive a custom message from the controller using a new message type
     ///
-    /// Optional, panics by default.
+    /// Optional, panics by default
     fn custom(&mut self, message_type: char, message_body: &str) {
         panic!("unsupported operation: {message_type}")
     }
 
-    /// This method is called just before the controller process exits.
+    /// This method is called just before the controller process exits
     ///
-    /// Optional, does nothing by default.
+    /// Optional, does nothing by default
     fn quit(&mut self) {}
 
     /// Run a genetic algorithm program
