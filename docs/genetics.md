@@ -6,7 +6,7 @@ responsible for handling genomes.
 The word "**genome**" refers to a complete set of parameters for creating an
 AI agent. Each individual has exactly one immutable genome, which is appended
 to the individual's file, as described in the chapter on
-[evolutionary algorithms](/docs/evolution.md).
+[individual files](/docs/individuals.md).
 
 Genomes are treated as opaque binary objects outside of genetic algorithms.
 Genomes are converted into "**phenomes**" before transmission to controllers.

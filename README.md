@@ -5,9 +5,10 @@ contain AI agents. It defines software interfaces that separate environments
 from their surrounding concerns, and provides APIs for using them.
 The NPC Maker also provides a collection of ready-to-use tools and environments.
 
-The framework consists of four major components:
+The interfaces are documented in these chapters:
 * [Simulated Environments](/docs/environments.md)
 * [Control Systems](/docs/controllers.md)
+* [Individuals' Files](/docs/individuals.md)
 * [Genetic Algorithms](/docs/genetics.md)
 * [Evolutionary Algorithms](/docs/evolution.md)
 
