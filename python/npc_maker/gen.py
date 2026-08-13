@@ -78,12 +78,7 @@ class GeneticAlgorithm:
         command = "[\"asex\", {}]\n".format(path)
         self._worker.stdin.write(command.encode("utf-8"))
         self._worker.stdin.flush()
-        response = _readline()
-        response = json.loads(response)
-        genome_len  = int(response["genome"])
-        phenome_len = int(response["phenome"])
-        genome  = _readbytes(genome_len)
-        phenome = _readbytes(phenome_len)
+        return self._read_response()
 
     def sex(self, *parents) -> (bytes, bytes):
         """
@@ -91,7 +86,27 @@ class GeneticAlgorithm:
 
         Returns a pair of byte arrays (genome, phenome)
         """
-    	1/0
+        paths = []
+        for parent in parents:
+            assert isinstance(parent, Individual)
+            path = parent.get_path()
+            if not path:
+                path = parent.save()
+            paths.append(path)
+        command = ["sex"] + paths
+        command = json.dumps(command)
+        self._worker.stdin.write(command.encode("utf-8"))
+        self._worker.stdin.flush()
+        return self._read_response()
+
+    def _read_response(self):
+        response = _readline()
+        response = json.loads(response)
+        genome_len  = int(response["genome"])
+        phenome_len = int(response["phenome"])
+        genome  = _readbytes(genome_len)
+        phenome = _readbytes(phenome_len)
+        return (genome, phenome)
 
     def custom(self, name, arguments) -> object:
         """
@@ -105,13 +120,15 @@ class GeneticAlgorithm:
 
 		Returns an object received from the genetic algorithm
         """
-        1/0
-        message_type = str(message_type).strip().upper()
-        assert len(message_type) == 1
-        assert message_type not in ["asex", "sex"]
-        message_body = str(message_body)
-        assert '\n' not in message_body
-        self._worker.stdin.write("{}{}\n".format(message_type, message_body).encode("utf-8"))
+        name = str(name)
+        assert name not in ["asex", "sex"]
+        arguments = list(arguments)
+        command = [name] + arguments
+        command = json.dumps(command)
+        assert '\n' not in command
+        self._worker.stdin.write(command.encode("utf-8"))
+        response = _readline()
+        return json.loads(response)
 
     def __del__(self):
         if hasattr(self, "_worker") and not self._worker.stdin.closed:
