@@ -5,6 +5,7 @@ All global functions in this module are for implementing environment programs.
 """
 
 from pathlib import Path
+from utils import eprint
 import collections
 import datetime
 import json
@@ -32,7 +33,7 @@ def _timestamp():
 
 def Specification(env_spec_path):
     """
-    Load an environment specification from file.
+    Load an environment specification from file
     """
     # Clean up the filesystem path argument.
     env_spec_path = Path(env_spec_path).expanduser().resolve()
@@ -251,19 +252,9 @@ def _help_message(env_spec):
             message += line + "\n"
     return message
 
-def eprint(*args, **kwargs):
-    """
-    Print to stderr
-
-    The NPC Maker uses the environment program's stdin & stdout to communicate
-    with the main program via a standardized JSON-based protocol. Unformatted
-    diagnostic and error messages should be written to stderr using this function.
-    """
-    print(*args, **kwargs, file=sys.stderr, flush=True)
-
 def get_args():
     """
-    Read the command line arguments for an NPC Maker environment program.
+    Read the command line arguments for an NPC Maker environment program
 
     Returns a tuple of (environment-specification, graphics-mode, settings-dict)
     """
@@ -306,10 +297,10 @@ def get_args():
 
 def input():
     """
-    Read the next individual from the evolution program, blocking.
+    Read the next individual from the evolution program, blocking
 
-    New individual must be requested before calling this with the spawn() and
-    mate() functions.
+    A new individual must be requested before calling this with the
+    spawn() and mate() functions.
     """
     message = b''
     while True:
@@ -340,7 +331,7 @@ def _try_print(*args, **kwargs):
 
 def spawn(body_type=None):
     """
-    Request a new individual from this body_type's evolution API.
+    Request a new individual from this body_type's evolution API
 
     Argument body_type is optional if the environment has exactly one body_type.
     """
@@ -350,7 +341,7 @@ def spawn(body_type=None):
 
 def mate(*parents):
     """
-    Request to mate specific individuals together to produce a child individual.
+    Request to mate specific individuals together to produce a child individual
     """
     parents = [str(p) for p in parents]
     assert len(parents) > 0
@@ -358,7 +349,7 @@ def mate(*parents):
 
 def score(name, score):
     """
-    Report an individual's score or reproductive fitness to the evolution API.
+    Report an individual's score or reproductive fitness to the evolution API
 
     This should be called *before* calling "death()" on the individual.
     """
@@ -368,7 +359,7 @@ def score(name, score):
 
 def telemetry(name, info):
     """
-    Report extra information about an individual.
+    Report extra information about an individual
 
     Argument info is a mapping of string key-value pairs.
     """
@@ -378,7 +369,7 @@ def telemetry(name, info):
 
 def death(name):
     """
-    Notify the evolution API that the given individual has died.
+    Notify the evolution API that the given individual has died
 
     The individual's score or reproductive fitness should be reported
     using the "score()" function *before* calling this method.
@@ -436,7 +427,7 @@ class SoloAPI:
     @classmethod
     def main(cls):
         """
-        Run the environment program.
+        Run the environment program
 
         This function handles communications between the environment
         (this program) and the evolution program, which execute in separate
@@ -475,8 +466,9 @@ class SoloAPI:
 
 class Environment:
     """
-    This class encapsulates an instance of an environment and provides methods
-    for using environments.
+    An environment instance
+
+    This class provides methods for making and using environments.
 
     Each environment instance execute in its own subprocess
     and communicates with the caller over its standard I/O channels.

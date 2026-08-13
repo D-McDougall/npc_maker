@@ -5,46 +5,16 @@ Genetic Interface, for analyzing and manipulating genetic material
 from evo import Individual
 from pathlib import Path
 import errno
-import shlex
 import subprocess
 import sys
 import time
+from utils import eprint, _clean_command, _readline, _readbytes
 
 __all__ = (
     "API",
     "eprint",
     "GeneticAlgorithm",
 )
-
-def eprint(*args, **kwargs):
-    """
-    Print to stderr
-
-    The NPC Maker uses the genetic algorithm's stdin & stdout for
-    communication using a standardized message protocol. Unformatted
-    diagnostic and error messages should be written to stderr using this
-    function.
-    """
-    print(*args, **kwargs, file=sys.stderr, flush=True)
-
-def _clean_command(command):
-    if command is None:
-        return None
-    elif isinstance(command, Path):
-        command = [command]
-    elif isinstance(command, str):
-        command = shlex.split(command)
-    else:
-        command = list(command)
-    if not command:
-        return None
-    program = Path(command[0]).expanduser().resolve()
-    command[0] = program
-    for index in range(1, len(command)):
-        arg = command[index]
-        if not isinstance(arg, bytes) and not isinstance(arg, str):
-            command[index] = str(arg)
-    return command
 
 class GeneticAlgorithm:
     """
@@ -67,7 +37,7 @@ class GeneticAlgorithm:
         		 stderr channel. By default, the genetic algorithm will
         		 inherit this process's stderr channel.
         """
-        self.command 	= _clean_command(command)
+        self.command 	= utils._clean_command(command)
         self._worker    = subprocess.Popen(self.command,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
@@ -101,11 +71,19 @@ class GeneticAlgorithm:
 
         Returns a pair of byte arrays (genome, phenome)
         """
-        1/0
-        # if isinstance(value, str):
-        #     value = bytes(value, encoding="utf-8")
-        # assert isinstance(value, bytes)
-        # self._worker.stdin.write("G{}\n".format(len(value)).encode("utf-8"))
+        assert isinstance(parent, Individual)
+        path = parent.get_path()
+        if not path:
+            path = parent.save()
+        command = "[\"asex\", {}]\n".format(path)
+        self._worker.stdin.write(command.encode("utf-8"))
+        self._worker.stdin.flush()
+        response = _readline()
+        response = json.loads(response)
+        genome_len  = int(response["genome"])
+        phenome_len = int(response["phenome"])
+        genome  = _readbytes(genome_len)
+        phenome = _readbytes(phenome_len)
 
     def sex(self, *parents) -> (bytes, bytes):
         """
