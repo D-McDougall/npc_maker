@@ -8,7 +8,7 @@ import errno
 import subprocess
 import sys
 import time
-from utils import eprint, _clean_command, _readline, _readbytes
+from utils import eprint, clean_command, readline, readbytes
 
 __all__ = (
     "API",
@@ -37,7 +37,7 @@ class GeneticAlgorithm:
         		 stderr channel. By default, the genetic algorithm will
         		 inherit this process's stderr channel.
         """
-        self.command 	= utils._clean_command(command)
+        self.command 	= utils.clean_command(command)
         self._worker    = subprocess.Popen(self.command,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
@@ -100,12 +100,12 @@ class GeneticAlgorithm:
         return self._read_response()
 
     def _read_response(self):
-        response = _readline()
+        response = readline()
         response = json.loads(response)
         genome_len  = int(response["genome"])
         phenome_len = int(response["phenome"])
-        genome  = _readbytes(genome_len)
-        phenome = _readbytes(phenome_len)
+        genome  = readbytes(genome_len)
+        phenome = readbytes(phenome_len)
         return (genome, phenome)
 
     def custom(self, name, arguments) -> object:
@@ -127,7 +127,7 @@ class GeneticAlgorithm:
         command = json.dumps(command)
         assert '\n' not in command
         self._worker.stdin.write(command.encode("utf-8"))
-        response = _readline()
+        response = readline()
         return json.loads(response)
 
     def __del__(self):

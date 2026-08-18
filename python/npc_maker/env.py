@@ -5,7 +5,7 @@ All global functions in this module are for implementing environment programs.
 """
 
 from pathlib import Path
-from utils import eprint
+from utils import eprint, readline, readbytes, close_stdio
 import collections
 import datetime
 import json
@@ -302,19 +302,11 @@ def input():
     A new individual must be requested before calling this with the
     spawn() and mate() functions.
     """
-    message = b''
-    while True:
-        char = sys.stdin.buffer.read1(1)
-        if not char:
-            raise EOFError
-        if char == b'\n':
-            break
-        else:
-            message += char
-    message = json.loads(message)
-    num_bytes = int(message["genome"])
-    message["genome"] = sys.stdin.buffer.read(num_bytes)
-    return message
+    message = readline()
+    individual = json.loads(message)
+    num_bytes = int(individual["genome"])
+    individual["genome"] = readbytes(num_bytes)
+    return individual
 
 def _try_print(*args, **kwargs):
     # If the stdout channel is simply closed, then quietly exit.
@@ -322,10 +314,10 @@ def _try_print(*args, **kwargs):
     try:
         print(*args, **kwargs, file=sys.stdout, flush=True)
     except BrokenPipeError:
-        sys.stdin.close()
+        close_stdio()
     except ValueError:
         if sys.stdout.closed:
-            sys.stdin.close()
+            close_stdio()
         else:
             raise
 

@@ -1,3 +1,4 @@
+from pathlib import Path
 import shlex
 import sys
 
@@ -11,7 +12,10 @@ def eprint(*args, **kwargs):
     """
     print(*args, **kwargs, file=sys.stderr, flush=True)
 
-def _clean_command(command):
+def clean_command(command):
+    """
+    Check user input
+    """
     if command is None:
         return None
     elif isinstance(command, Path):
@@ -33,11 +37,22 @@ def _clean_command(command):
 _stdin       = None
 _buffer      = b""
 
-def _readline():
-    global _stdin, _buffer
-    read_size = 1000
+def _init_stdin():
+    global _stdin
     if _stdin is None:
-        _stdin = open(sys.stdin.fileno(),  mode='rb', buffering=0)
+        fd = sys.stdin.fileno()
+        _stdin = open(fd,  mode='rb', buffering=0)
+        # sys.stdin.close()
+
+def readline():
+    """
+    Read one line from the standard input channel
+
+    Do not mix calls to "readline()" with the built-in "input()" function!
+    """
+    global _stdin, _buffer
+    _init_stdin()
+    read_size = 1000
     if b"\n" not in _buffer:
         while True:
             chunk = _stdin.read(read_size)
@@ -56,8 +71,14 @@ def _readline():
     line = line.decode("utf-8")
     return line
 
-def _readbytes(num_bytes):
+def readbytes(num_bytes):
+    """
+    Read an exact number of bytes from the standard input channel
+
+    Do not mix calls to "readbytes()" with the built-in "input()" function!
+    """
     global _stdin, _buffer
+    _init_stdin()
     while len(_buffer) < num_bytes:
         chunk = _stdin.read(num_bytes - len(_buffer))
         # Yield execution if waiting for data.
@@ -71,3 +92,14 @@ def _readbytes(num_bytes):
     data    = _buffer[:num_bytes]
     _buffer = _buffer[num_bytes:]
     return data
+
+def close_stdio():
+    """
+    Close the standard input and output channels
+
+    This signals to the calling program that this program has quit 
+    """
+    if not sys.stdout.closed:
+        sys.stdout.close()
+    if _stdin is not None and not _stdin.closed:
+        _stdin.close()

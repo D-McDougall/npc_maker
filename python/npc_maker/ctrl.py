@@ -3,7 +3,7 @@ Controller Interface, for making and using control systems.
 """
 
 from pathlib import Path
-from utils import eprint, _clean_command, _readline, _readbytes
+from utils import eprint, clean_command, readline, readbytes
 import errno
 import subprocess
 import sys
@@ -48,7 +48,7 @@ class Controller:
             environment = environment["spec"]
         self.environment    = Path(environment)
         self.population     = str(population)
-        self.command        = _clean_command(command)
+        self.command        = clean_command(command)
         self._ctrl          = subprocess.Popen(self.command,
             stdin           = subprocess.PIPE,
             stdout          = subprocess.PIPE,
@@ -85,7 +85,7 @@ class Controller:
         """
         Check if this controller is running the given command.
         """
-        return self.command == _clean_command(command)
+        return self.command == clean_command(command)
 
     def __repr__(self):
         return "<npc_maker.ctrl.Controller: {}>".format(repr(self.get_command()))
@@ -221,7 +221,7 @@ _population  = None
 def _parse_message():
     # Ignore leading white space and empty lines.
     while True:
-        message = _readline()
+        message = readline()
         message = message.lstrip()
         if message:
             break
@@ -249,7 +249,7 @@ class API:
 
             if msg_type == "I":
                 gin   = int(msg_body)
-                value = _readline()
+                value = readline()
                 self.set_input(gin, value)
 
             elif msg_type == "O":
@@ -261,8 +261,8 @@ class API:
 
             elif msg_type == "B":
                 gin             = int(msg_body)
-                num_bytes       = _readline()
-                binary          = _readbytes(num_bytes)
+                num_bytes       = readline()
+                binary          = readbytes(num_bytes)
                 self.set_binary(gin, binary)
 
             elif msg_type == "A":
@@ -274,7 +274,7 @@ class API:
 
             elif msg_type == "G":
                 num_bytes = int(msg_body)
-                binary    = _readbytes(num_bytes)
+                binary    = readbytes(num_bytes)
                 self.genome(_environment, _population, binary)
 
             elif msg_type == "E":
@@ -291,7 +291,7 @@ class API:
 
             elif msg_type == "L":
                 num_bytes  = int(msg_body)
-                save_state = _readbytes(num_bytes)
+                save_state = readbytes(num_bytes)
                 self.load(save_state)
 
             else:
