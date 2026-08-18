@@ -5,7 +5,7 @@
     rust-version = "1.86"
     license = "MIT-0"
     description = "Evolve AIs in simulated environments"
-    repository = "https://github.com/ctrl-z-9000-times/npc_maker"
+    repository = "https://github.com/D-McDougall/npc_maker"
     categories = ["science"]
     keywords = ["ai", "alife", "evolution"]
 

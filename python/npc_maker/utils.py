@@ -12,7 +12,7 @@ def eprint(*args, **kwargs):
     """
     print(*args, **kwargs, file=sys.stderr, flush=True)
 
-def clean_command(command):
+def clean_command(command, resolve=True) -> [str]:
     """
     Check user input
     """
@@ -26,7 +26,9 @@ def clean_command(command):
         command = list(command)
     if not command:
         return None
-    program = Path(command[0]).expanduser().resolve()
+    program = Path(command[0])
+    if resolve:
+        program = program.expanduser().resolve()
     command[0] = program
     for index in range(1, len(command)):
         arg = command[index]

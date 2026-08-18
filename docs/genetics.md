@@ -22,8 +22,8 @@ terminate when their input reaches end of file. Commands are executed in the
 order they are received. Commands are formatted as JSON arrays, with the
 following structure:
 
-|  Index | JSON Type | Description |
-| :----- | :------------- | :-------- |
+| Array Index | JSON Type | Description |
+| :---------- | :-------- | :---------- |
 | 0 | String | Name of command |
 | 1, 2, 3, ... | Any | Arguments for command |
 

@@ -6,7 +6,6 @@ Evolutionary algorithms and supporting tools.
 #   * Population: subclasses vs type enumeration.
 #   * Population: python and rust use different file structures, rust version is better.
 #   * Evolution: folded into Population class, rename Population to Evolution.
-#   * Python population ignores individuals with invalid scores, rust sets score to -inf.
 
 from pathlib import Path
 import copy
