@@ -24,6 +24,7 @@ following table summarizes the message types. The parts of the message format
 written in `[ALL_CAPS_AND_BRACKETS]` are placeholders for runtime data. In all
 messages the `[NUM]` and `[BYTES]` arguments form a binary array. 
 `[ID]` are non-negative integers that identify sensor and motor interfaces.
+By convention, sensor and motor interfaces are enumerated, separately, starting at zero.
 
 |  Message Type | Message Format | Arguments | Description |
 | :------------ | :------------- | :-------- | ----------- |
@@ -55,8 +56,8 @@ channel. Output messages should only be sent in response to specific requests.
 ## Standard Error Channel ##
 
 The standard error channel is for unformatted diagnostic and error messages.
-By default controllers inherit their `stderr` channel from their environment.
+By default controllers inherit their `stderr` channel from the environment simulation program.
 
-In the event that any of the three standard I/O channels closes or emits an error,
+In the event that any of the three standard I/O channels close or emit an error,
 then all parties should assume that the controller program is dead and act accordingly.
 

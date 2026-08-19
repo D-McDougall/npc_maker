@@ -4,7 +4,6 @@ An "**individual**" is a distinct life-form with its own genome.
 Evolutionary algorithms operate on individuals, while genetic algorithms
 operate on genomes.
 
-
 ## The Individual File Format ##
 
 Individuals are stored in a standard file format. An individual consist of a
@@ -38,4 +37,3 @@ The file format for individuals is:
 
 Individual files always named after the individual's name, and with the
 file extension `.indiv`
-

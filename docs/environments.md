@@ -1,7 +1,7 @@
 # The Environment Interface #
 
 This chapter describes the interface between evolution programs and environment programs.
-The word "**environment**" refers to a self contained simulated world and
+The word "**environment**" refers to a self-contained simulated world and
 everything in it, including all of the living bodies and their control systems. 
 The NPC Maker defines a standard interface for interacting with arbitrary environments.
 

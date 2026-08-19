@@ -68,5 +68,7 @@ Custom commands return a single-line JSON object, containing any value.
 ## Standard Error Channel ##
 
 The standard error channel is for unformatted diagnostic and error messages.
-By default it should be inherited from the evolutionary algorithm's process.
+
+In the event that any of the three standard I/O channels close or emit an error,
+then all parties should assume that the genetic program has terminated and act accordingly.
 
