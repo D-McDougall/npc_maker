@@ -159,7 +159,7 @@ impl Individual {
         individual
     }
 
-    // TODO: Sex allows more than two parents
+    // TODO: Sex allows more than two parents, and should not crash with only one parent.
 
     /// Sexually reproduce two individuals
     pub fn sex(&mut self, other: &mut Individual, child_genome: &[u8]) -> Individual {
