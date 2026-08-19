@@ -2,8 +2,8 @@
 Controller Interface, for making and using control systems.
 """
 
+from .utils import eprint, clean_command, readline, readbytes
 from pathlib import Path
-from utils import eprint, clean_command, readline, readbytes
 import errno
 import subprocess
 import sys

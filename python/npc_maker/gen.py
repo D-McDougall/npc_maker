@@ -2,13 +2,13 @@
 Genetic Interface, for analyzing and manipulating genetic material
 """
 
-from evo import Individual
+from .indiv import Individual
+from .utils import eprint, clean_command, readline, readbytes
 from pathlib import Path
 import errno
 import subprocess
 import sys
 import time
-from utils import eprint, clean_command, readline, readbytes
 
 __all__ = (
     "API",

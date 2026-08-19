@@ -3,7 +3,7 @@ Data structure to represent an individual life-form
 """
 
 from pathlib import Path
-from utils import clean_command
+from .utils import clean_command
 import io
 import json
 import math
@@ -41,17 +41,17 @@ class Individual:
     Container for a distinct life-form and all of its associated data
     """
     def __init__(self,
-                environment: str = None,
-                body_type: str = None,
-                controller: [str] = None,
+                environment: str,
+                body_type: str,
+                controller: [str],
                 genome: bytes):
         """
         Create a new individual. This is used to initialize new populations
         """
         _check_genome(genome)
         self.name           = str(uuid.uuid4())
-        self.environment    = str(environment)  if environment is not None else None
-        self.body_type      = str(body_type)    if body_type is not None else None
+        self.environment    = str(environment)
+        self.body_type      = str(body_type)
         # Don't resolve the path because the PWD could change.
         self.controller     = clean_command(controller, resolve=False)
         self.genome         = genome
@@ -92,7 +92,7 @@ class Individual:
         """
         return list(self.controller)
 
-    def get_genome(self) -> Genome:
+    def get_genome(self) -> bytes:
         """
         Get this individual's genetic data,
         which is an immutable byte array

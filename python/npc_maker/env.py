@@ -4,8 +4,8 @@ Environment Interface, for making and using environments.
 All global functions in this module are for implementing environment programs.
 """
 
+from .utils import eprint, readline, readbytes, close_stdio
 from pathlib import Path
-from utils import eprint, readline, readbytes, close_stdio
 import collections
 import datetime
 import json
