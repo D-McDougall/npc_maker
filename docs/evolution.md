@@ -62,6 +62,12 @@ The evolutionary algorithm is responsible for maintaining or deleting the
 given file.
 
 
+### Non-Standard Commands ###
+
+Evolutionary algorithms may implement extra / custom commands.
+However, it is an error to invoke an undefined command.
+
+
 ## Standard Error Channel ##
 
 The standard error channel is for unformatted diagnostic and error messages.

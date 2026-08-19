@@ -26,17 +26,17 @@ following structure:
 | 1, 2, 3, ... | Any | Arguments for command |
 
 
-### asex ###
+### Command: asex ###
 
-_command format:_ `["asex", "PARENT_PATH"]`
+_message format:_ `["asex", "PARENT_PATH"]`
 
 This function asexually reproduces an individual. It should copy the given genome
 and apply mutations.
 
 
-### sex ###
+### Command: sex ###
 
-_command format:_ `["sex", "PARENT_1_PATH", "PARENT_2_PATH", ...]`
+_message format:_ `["sex", "PARENT_1_PATH", "PARENT_2_PATH", ...]`
 
 This function sexually reproduces the given individuals. This may receive more
 than two genomes. It should apply crossover and mutation to the given genomes.
