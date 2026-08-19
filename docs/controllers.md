@@ -58,6 +58,7 @@ channel. Output messages should only be sent in response to specific requests.
 The standard error channel is for unformatted diagnostic and error messages.
 By default controllers inherit their `stderr` channel from the environment simulation program.
 
-In the event that any of the three standard I/O channels close or emit an error,
-then all parties should assume that the controller program is dead and act accordingly.
+In the event that any of the three standard I/O channels closes or emits an
+error, then all parties should assume that the controller program is dead and
+act accordingly.
 

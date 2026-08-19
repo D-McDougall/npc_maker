@@ -1,15 +1,15 @@
 # The Environment Interface #
 
-This chapter describes the interface between evolution programs and environment programs.
+This chapter describes the interface between router programs and environment programs.
 The word "**environment**" refers to a self-contained simulated world and
 everything in it, including all of the living bodies and their control systems. 
 The NPC Maker defines a standard interface for interacting with arbitrary environments.
 
 Environments always execute in a different computer process than the main
-program of the NPC Maker framework, which is referred to as
-the "**evolution**" program. This separation has many advantages, chiefly that
-users can create and control environments using the programming language of
-their choice.
+router program of the NPC Maker framework, which is referred to as
+the "**evolution**" program. This separation has many advantages, chiefly
+that users can create and control environments using the programming language
+of their choice.
 
 Environments have two parts: a static description and an executable program.
 The static description contains all of the information needed to configure and
@@ -19,11 +19,10 @@ and running the environment.
 
 ## Environment Specification ##
 
-The environment specification totally describes a single distinct and self
-contained environment. It is a JSON file encoded in UTF-8. It should use
-the ".env" file extension although this is not required. The file contains a
-single JSON object. The following table shows all of the expected attributes of
-the object. 
+The environment specification completely describes a single distinct and
+self-contained environment. It is a JSON file encoded in UTF-8. It must use
+the ".env" file extension. The file contains a single JSON object. The
+following table shows all of the expected attributes of the object. 
 
 | Attribute | JSON Type | Default Value | Description |
 | :-------- | :-------: | :------------ | :---------- |
@@ -35,7 +34,7 @@ the object.
 | `"description"` | String | `""` | User facing documentation message |
 | Unspecified | Any |  | Environments may include extra information |
 
-Extra attributes are simply ignored and so you can store miscellaneous data in
+Extra attributes are simply ignored so users may store miscellaneous data in
 this file. This file is given to the environment program as a command line
 argument, which allows one environment program to be reconfigured for multiple
 different scenarios.
@@ -131,14 +130,14 @@ specification.
 
 ## Environment Protocol ##
 
-The evolution program communicates with the environment over the environment's
+The router program communicates with the environment over the environment's
 `stdin`, `stdout` and `stderr` channels. When `stdin` closes the environment
 should exit.
 
 
 ### Standard Input Channel ###
 
-The evolution program sends new individuals to the environment. The environment
+The router program sends new individuals to the environment. The environment
 must request new individuals; new individuals will not be sent unsolicited.
 
 Individuals are transmitted in two parts. First metadata is encoded in UTF-8
@@ -157,7 +156,7 @@ information about the new individual:
 
 ### Standard Output Channel ###
 
-The environment sends commands and data to the evolution program. Each
+The environment sends commands and data to the router program. Each
 message occupies exactly one line, and is encoded in the UTF-8 JSON format.
 Words in ALLCAPS are placeholders for runtime data.  
 
@@ -173,7 +172,7 @@ Words in ALLCAPS are placeholders for runtime data.
 ### Standard Error Channel ###
 
 The `stderr` channel is reserved for communicating errors and diagnostic
-information from the environment program to the evolution program. The
-`stderr` channel has no specific message format or protocol. By default
-environments inherit their `stderr` channel from their evolution program.
+information from the environment program to the user. The `stderr` channel
+has no specific message format or protocol. By default environments inherit
+`stderr` from the router program.
 

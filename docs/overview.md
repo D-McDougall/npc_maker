@@ -23,7 +23,7 @@ Artificial-life experiments are split into 5 component types:
 
 ## Interface Specifications ##
 
-The interfaces are documented in these chapters:
+The interfaces are documented in the following chapters:
 * [Simulated Environments](/docs/environments.md)
 * [Control Systems](/docs/controllers.md)
 * [Individual Files](/docs/individuals.md)
@@ -33,12 +33,13 @@ The interfaces are documented in these chapters:
 ### Standard Error Channel ###
 
 The standard error channel is reserved for unformatted diagnostic and error messages.
-By default processes inherit `stderr` from their parent process, which should in turn forward its standard error to the user.
+By default processes inherit standard error from their parent process, which should
+in turn forward its standard error to the user.
 
-In the event that any of the three standard I/O channels close or emit an error,
-then all parties should assume that the other party has died and act accordingly.
-Close both the standard input and output channels to signal the termination of
-the program and to prevent deadlock.
+In the event that any of the three standard I/O channels closes or emits an error,
+then all parties should assume the other party has died and act accordingly.
+Close both standard input and output channels to signal the termination of the
+program and to prevent deadlock.
 
 ## Directory Structure ##
 

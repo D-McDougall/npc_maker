@@ -1,16 +1,14 @@
 # The Genetic Interface #
 
 This chapter describes the interface for genetic algorithms, which are
-responsible for handling genomes.
-
-The word "**genome**" refers to a complete set of parameters for creating an
-AI agent. Each individual has exactly one immutable genome, which is appended
-to the individual's file, as described in the chapter on
-[individual files](/docs/individuals.md).
+responsible for handling genomes. The word "**genome**" refers to a complete
+set of parameters for creating an AI agent's control system. Each individual
+has exactly one immutable genome, which is appended to the individual's file,
+as described in the chapter on [individual files](/docs/individuals.md).
 
 Genomes are treated as opaque binary objects outside of genetic algorithms.
 Genomes are converted into "**phenomes**" before transmission to controllers.
-This decouples the genetic representation from the controller implementation.
+This decouples the genetic representation from the control system implementation.
 
 Genetic algorithms execute in isolated computer processes and communicate over
 the standard IO channels, which are encoded in UTF-8 unless otherwise stated.
@@ -69,6 +67,7 @@ Custom commands return a single-line JSON object, containing any value.
 
 The standard error channel is for unformatted diagnostic and error messages.
 
-In the event that any of the three standard I/O channels close or emit an error,
-then all parties should assume that the genetic program has terminated and act accordingly.
+In the event that any of the three standard I/O channels closes or emits an
+error, then all parties should assume that the genetic program has terminated
+and act accordingly.
 
