@@ -21,9 +21,15 @@ Artificial-life experiments are split into 5 component types:
 * **Evolutionary Algorithms** decide which agents to reproduce.
 * **Genetic Algorithms** reproduce the parameters for control systems.
 
+Each of these component executes in its own computer process.
+Some components create and manage other components,
+and they may contain multiple instances of the contained component.
+In the diagram above: arrows indicate parent-child relationships,
+which are also one-to-many relationships.
+
 ## Interface Specifications ##
 
-The interfaces are documented in the following chapters:
+The NPC Maker interfaces are documented in the following chapters:
 * [Simulated Environments](/docs/environments.md)
 * [Control Systems](/docs/controllers.md)
 * [Individual Files](/docs/individuals.md)
@@ -32,21 +38,23 @@ The interfaces are documented in the following chapters:
 
 ### Standard Error Channel ###
 
-The standard error channel is reserved for unformatted diagnostic and error messages.
-By default processes inherit standard error from their parent process, which should
-in turn forward its standard error to the user.
+The standard error channel is reserved for unformatted diagnostic and error
+messages. Functions `eprint()` (python) and `eprintln!()` (rust) are provided
+for convenience. By default processes inherit standard error from their
+parent process, which should in turn forward its standard error to the user
+or a log file as appropriate.
 
-In the event that any of the three standard I/O channels closes or emits an error,
-then all parties should assume the other party has died and act accordingly.
-Close both standard input and output channels to signal the termination of the
-program and to prevent deadlock.
+In the event that any of the three standard I/O channels closes or emits an
+error, then all parties should assume the other party has died and act
+accordingly. To signal program termination without deadlocking: close both
+standard input and output channels.
 
 ## Directory Structure ##
 
-* `/docs/`
-* `/python/`
-* `/rust/`
-* `/examples/env/`
-* `/examples/ctrl/`
-* `/examples/evo/`
-* `/examples/gen/`
+* `/docs/` Interface Specifications
+* `/python/` Python language API for the NPC Maker interfaces
+* `/rust/` Rust language API for the NPC Maker interfaces
+* `/examples/env/` Example environments
+* `/examples/ctrl/` Example controllers
+* `/examples/evo/` Example evolutionary algorithms
+* `/examples/gen/` Example genetic algorithms

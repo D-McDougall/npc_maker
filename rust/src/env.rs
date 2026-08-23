@@ -1,11 +1,6 @@
-//! Environment Interface, for making and using environments.
-//!
-//! Each environment runs in its own computer process and uses stdin and stdout
-//! to communicate with the main program and the evolutionary algorithm which
-//! it contains. Environments should use stderr to report any diagnostic or
-//! unformatted messages(see [eprintln!()]).
+//! Environment Interface, for making and using environments
 
-use crate::evo;
+use crate::indiv;
 use process_anywhere::{Computer, Process};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -475,7 +470,7 @@ pub struct Environment {
     mode: Mode,
     settings: HashMap<String, String>,
     process: Box<Process>,
-    outstanding: HashMap<String, Box<evo::Individual>>,
+    outstanding: HashMap<String, Box<indiv::Individual>>,
     stderr: Box<dyn Write>,
 }
 
@@ -555,12 +550,12 @@ impl Environment {
 
     /// Get all individuals who are currently alive in this environment.
     /// Returns a dictionary indexed by individuals names.
-    pub fn get_outstanding(&self) -> &HashMap<String, Box<evo::Individual>> {
+    pub fn get_outstanding(&self) -> &HashMap<String, Box<indiv::Individual>> {
         &self.outstanding
     }
 
     /// Get a mutable reference to a specific outstanding individual.
-    pub fn get_outstanding_mut(&mut self, name: &str) -> Option<&mut evo::Individual> {
+    pub fn get_outstanding_mut(&mut self, name: &str) -> Option<&mut indiv::Individual> {
         self.outstanding.get_mut(name).map(Box::as_mut)
     }
 
@@ -575,7 +570,7 @@ impl Environment {
     /// Argument individual is moved to the list of outstanding individuals.
     ///
     /// Argument phenome is sent to the controller in place of the individual's genome.
-    pub fn birth(&mut self, mut individual: evo::Individual, phenome: &[u8]) {
+    pub fn birth(&mut self, mut individual: indiv::Individual, phenome: &[u8]) {
         #[derive(Serialize)]
         struct Metadata<'a> {
             name: &'a str,
@@ -692,7 +687,7 @@ pub enum Message {
     Mate { parents: [String; 2] },
 
     /// Report the death of an individual.
-    Death { individual: Box<evo::Individual> },
+    Death { individual: Box<indiv::Individual> },
 }
 
 #[cfg(test)]
