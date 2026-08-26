@@ -10,10 +10,10 @@ channels are UTF-8 unless otherwise stated.
 
 ## Command Line Invocation ##
 
-Controller programs are totally specified by their command line invocation. Both
-the program name and its arguments are considered part of the controller's
-identity. The evolution service provides the command line invocation to the
-environment, which should simply invoke it in a subprocess or at a shell.
+Controller programs are totally specified by their command line invocation.
+Both the program name and its arguments are considered part of the
+controller's identity. The command line invocation for the controller is
+provided to the environment, which should invoke it in a subprocess or shell.
 
 
 ## Standard Input Channel ##

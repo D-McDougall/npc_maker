@@ -36,13 +36,28 @@ The NPC Maker interfaces are documented in the following chapters:
 * [Genetic Algorithms](/docs/genetics.md)
 * [Evolutionary Algorithms](/docs/evolution.md)
 
+### Standard Input Channel ###
+
+Messages on this channel are UTF-8 text possibly followed by binary blobs. The
+text of a message contains the size of the following binary blobs, as
+plain-text ASCII decimal numbers. The text portion of a message is always
+terminated by a line-feed character "\n". Carriage returns "\r" are
+considered trailing whitespace, which is permitted and should be removed by
+the receiver.
+
+### Standard Output Channel ###
+
+Messages on this channel are always single-line JSON values, encoded in UTF-8.
+New-lines are represented by the line-feed character `\n`; carriage return
+characters `\r` should be ignored.
+
 ### Standard Error Channel ###
 
 The standard error channel is reserved for unformatted diagnostic and error
-messages. Functions `eprint()` (python) and `eprintln!()` (rust) are provided
-for convenience. By default processes inherit standard error from their
-parent process, which should in turn forward its standard error to the user
-or a log file as appropriate.
+messages. This channel is assumed to be UTF-8 encoded. Functions `eprint()`
+(python) and `eprintln!()` (rust) are provided for convenience. By default
+processes inherit standard error from their parent process, which should in
+turn forward its standard error to the user or a log file as appropriate.
 
 In the event that any of the three standard I/O channels closes or emits an
 error, then all parties should assume the other party has died and act

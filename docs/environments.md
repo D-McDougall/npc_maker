@@ -27,7 +27,7 @@ following table shows all of the expected attributes of the object.
 | Attribute | JSON Type | Default Value | Description |
 | :-------- | :-------: | :------------ | :---------- |
 | `"name"`   | String | Required | Name of the environment, should be universally unique |
-| `"path"`   | String | Required | Filesystem path of the environment's executable program, relative to this file |
+| `"path"`   | String | Required | Filesystem path of the environment's executable program, relative to this file's parent directory |
 | `"spec"`   | String | Automatic | Filesystem path of the environment specification (this file) |
 | `"body_types"` | Array of BodySpecs | Required | Specification for each type of organism |
 | `"settings"` | Array of Settings | `[]` | Settings menu items for customizing the environment |
@@ -158,7 +158,7 @@ information about the new individual:
 
 The environment sends commands and data to the router program. Each
 message occupies exactly one line, and is encoded in the UTF-8 JSON format.
-Words in ALLCAPS are placeholders for runtime data.  
+Words in ALLCAPS are placeholders for runtime data, which are all strings.  
 
 | Message Type | Message Format | Description |
 | :----------- | :------------- | :---------- |

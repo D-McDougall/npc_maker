@@ -55,8 +55,9 @@ Return values are written to standard output as JSON objects.
 Commands `asex` and `sex` return a genome-phenome pair, in the format:  
 `{"genome": GENOME, "phenome": PHENOME}\n`
 
-Which is immediately followed by two byte arrays, which must be read in binary mode.
-The values `GENOME` and `PHENOME` are integer array lengths, corresponding to the first and second arrays, respectively.
+Where `GENOME` and `PHENOME` are integer array lengths, encoded as ASCII
+decimal numbers. The new-line is immediately followed by the genome array and
+then the phenome array, which must be read in binary mode.
 
 ---
 
