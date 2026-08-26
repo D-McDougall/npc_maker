@@ -14,7 +14,7 @@ def eprint(*args, **kwargs):
 
 def clean_command(command, resolve=True) -> [str]:
     """
-    Check user input
+    Check user input executable command strings
     """
     if command is None:
         return None
@@ -94,6 +94,33 @@ def readbytes(num_bytes):
     data    = _buffer[:num_bytes]
     _buffer = _buffer[num_bytes:]
     return data
+
+def writeline(line):
+    """
+    Write text to the standard output channel, terminated by a new-line and flushed
+    """
+    line = str(line)
+    data = line.encode('utf-8')
+    data += b'\n'
+    writebytes(data)
+
+def writebytes(data):
+    """
+    Write a binary array to the standard output channel, and flush it
+    """
+    # If the stdout channel is simply closed, then quietly exit by closing stdin.
+    # For other more abnormal conditions raise the error to the user.
+    assert isinstance(data, bytes)
+    try:
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        close_stdio()
+    except ValueError:
+        if sys.stdout.closed:
+            close_stdio()
+        else:
+            raise
 
 def close_stdio():
     """

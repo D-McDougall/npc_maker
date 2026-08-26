@@ -2,7 +2,7 @@
 Controller Interface, for making and using control systems.
 """
 
-from .utils import eprint, clean_command, readline, readbytes
+from .utils import eprint, clean_command, readline, readbytes, writeline, writebytes
 from pathlib import Path
 import errno
 import subprocess
@@ -257,7 +257,7 @@ class API:
                 value = str(self.get_output(gin))
                 assert '\n' not in value
                 reply = f"O{gin}\n{value}"
-                print(reply, flush=True)
+                writeline(reply)
 
             elif msg_type == "B":
                 gin             = int(msg_body)
@@ -285,9 +285,9 @@ class API:
 
             elif msg_type == "S":
                 save_state = self.save()
-                sys.stdout.buffer.write("S{}\n".format(len(save_state)).encode("utf-8"))
-                sys.stdout.buffer.write(save_state)
-                sys.stdout.buffer.flush()
+                reply = f"S{len(save_state)}"
+                writeline(reply)
+                writebytes(save_state)
 
             elif msg_type == "L":
                 num_bytes  = int(msg_body)
