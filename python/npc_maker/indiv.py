@@ -19,22 +19,23 @@ def _check_genome(genome):
     assert type(genome) is bytes
     assert len(genome) > 0
 
-_standard_fields = [
-    "name",
-    "environment",
-    "body_type",
-    "controller",
-    "score",
-    "telemetry",
-    "epigenome",
-    "species",
-    "parents",
-    "children",
-    "generation",
-    "ascension",
-    "birth_date",
-    "death_date",
-]
+# All individuals have these fields, with default value constructors.
+_standard_fields = {
+    "name": None,
+    "environment": None,
+    "body_type": None,
+    "controller": None,
+    "score": type(None),
+    "telemetry": dict,
+    "epigenome": dict,
+    "species": lambda: str(uuid.uuid4()),
+    "parents": list,
+    "children": list,
+    "generation": int,
+    "ascension": type(None),
+    "birth_date": str,
+    "death_date": str,
+}
 
 class Individual:
     """
@@ -331,10 +332,20 @@ class Individual:
                     break
         metadata = json.loads(text)
         self = cls.__new__(cls, **metadata)
-        for attribute in _standard_fields:
+        for attribute, default_value in _standard_fields.items():
             if attribute in metadata:
                 value = metadata.pop(attribute)
-                setattr(self, attribute, value)
+            elif attribute == "name":
+                value = path.stem
+            elif default_value is not None:
+                value = default_value()
+            else:
+                continue
+            setattr(self, attribute, value)
         self.extra = metadata
         self.path = path
+        self.genome = None
+        # Convert controller path back to Path objects.
+        if getattr(self, "controller", False):
+            self.controller[0] = Path(self.controller[0])
         return self
