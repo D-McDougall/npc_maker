@@ -47,6 +47,9 @@ For example, here is a hand-crafted solution:
 from npc_maker import env
 import json
 
+tstop = 100
+dt    = 0.1
+
 class XorTest(env.SoloAPI):
 
     def __init__(self, env_spec, mode, **settings):
@@ -62,32 +65,23 @@ class XorTest(env.SoloAPI):
         for input_1 in [0, 1]:
             for input_2 in [0, 1]:
                 controller.reset();
-                # Run the neural network until the neural network reaches a steady state response.
-                steadystate = False
                 prev = None
-                for _ in range(4):
+                for _ in range(round(tstop / dt)):
                     controller.set_input(0, input_1)
                     controller.set_input(1, input_2)
-                    controller.advance(1.0)
-                    answer = float(controller.get_outputs(2))
-                    # 
+                    controller.advance(dt)
+                    answer = float(controller.get_outputs(0))
+                    # Stop the neural network if it reaches steady state.
                     if answer == prev:
-                        steadystate = True
                         break
                     else:
                         prev = answer
                 # Update the score.
-                if steadystate:
-                    correct = float(input_1 != input_2)
-                    answer  = max(0.0, min(1.0, answer))
-                    distance += abs(answer - correct)
-                    if self.verbose:
-                        env.eprint(f"{input_1} xor {input_2} = {answer}")
-                else:
-                    # Discard neural networks that contain recurrent connections
-                    # or have too many hidden layers.
-                    if self.verbose: env.eprint("Network unstable, score 0")
-                    return 0.0
+                correct = float(input_1 != input_2)
+                answer  = max(0.0, min(1.0, answer))
+                distance += abs(answer - correct)
+                if self.verbose:
+                    env.eprint(f"{input_1} xor {input_2} = {answer}")
         score = (4.0 - distance) ** 2
         if self.verbose: env.eprint(f"score {score}")
         return score

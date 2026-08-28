@@ -42,13 +42,13 @@ impl Chromosome {
 #[derive(Debug, Default)]
 struct NeuralNetwork {
     /// Maps name to index
-    names: HashMap<u64, u64>,
+    names: HashMap<u64, Vec<usize>>,
 
     nodes: Vec<(f64, f64)>,
 
     state: Vec<f64>,
 
-    edges: Vec<(u64, u64, f64)>,
+    edges: Vec<(usize, usize, f64)>,
 }
 
 impl API for NeuralNetwork {
@@ -57,40 +57,42 @@ impl API for NeuralNetwork {
         let mut genome: Vec<Chromosome> = serde_json::from_slice(&genome).unwrap();
         genome.sort_unstable_by_key(|x| x.name());
         //
-        self.names = genome
-            .iter()
-            .filter_map(|chrom| match chrom {
-                Chromosome::Node { .. } => Some(chrom.name()),
-                Chromosome::Edge { .. } => None,
-            })
-            .enumerate()
-            .map(|(idx, name)| (name, idx as u64))
-            .collect();
-        //
-        self.nodes = genome
+        self.names.clear();
+        self.nodes.clear();
+        for (idx, (name, midpoint, slope)) in genome
             .iter()
             .filter_map(|chrom| match chrom {
                 Chromosome::Node {
-                    slope, midpoint, ..
-                } => Some((*slope, *midpoint)),
+                    name,
+                    midpoint,
+                    slope,
+                } => Some((name, midpoint, slope)),
                 Chromosome::Edge { .. } => None,
             })
-            .collect();
+            .enumerate()
+        {
+            self.names.entry(*name).or_default().push(idx);
+            self.nodes.push((*slope, *midpoint));
+        }
         //
         self.state = vec![0.0; self.nodes.len()];
         //
-        self.edges = genome
-            .iter()
-            .filter_map(|chrom| match chrom {
-                Chromosome::Node { .. } => None,
-                Chromosome::Edge {
-                    presyn,
-                    postsyn,
-                    weight,
-                    ..
-                } => Some((self.names[presyn], self.names[postsyn], *weight)),
-            })
-            .collect();
+        self.edges.clear();
+        for chrom in genome {
+            if let Chromosome::Edge {
+                presyn,
+                postsyn,
+                weight,
+                ..
+            } = chrom
+            {
+                for presyn_index in &self.names[&presyn] {
+                    for postsyn_index in &self.names[&postsyn] {
+                        self.edges.push((*presyn_index, *postsyn_index, weight));
+                    }
+                }
+            }
+        }
     }
 
     fn reset(&mut self) {
@@ -109,11 +111,19 @@ impl API for NeuralNetwork {
     }
 
     fn set_input(&mut self, gin: u64, value: String) {
-        self.state[gin as usize] = value.parse().unwrap();
+        let value: f64 = value.parse().unwrap();
+        for index in &self.names[&gin] {
+            self.state[*index] = value;
+        }
     }
 
     fn get_output(&mut self, gin: u64) -> String {
-        self.state[gin as usize].to_string()
+        let mut sum = 0.0;
+        for index in &self.names[&gin] {
+            sum += self.state[*index];
+        }
+        let avg = sum / self.names[&gin].len() as f64;
+        avg.to_string()
     }
 }
 

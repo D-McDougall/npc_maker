@@ -2,32 +2,24 @@ use npc_maker::ctrl::Controller;
 use npc_maker::env;
 use std::io::ErrorKind;
 
-fn xor_test(ctrl: &mut Controller, verbose: bool) -> f64 {
+fn xor_env(ctrl: &mut Controller, verbose: bool) -> f64 {
     let mut distance: f64 = 0.0;
     for input_1 in 0..=1 {
         for input_2 in 0..=1 {
             ctrl.reset().unwrap();
-            let mut prev = None;
-            let mut steadystate = false;
-            for _ in 0..4 {
+            for _ in 0..1000 {
                 ctrl.set_input(0, &format!("{input_1}")).unwrap();
                 ctrl.set_input(1, &format!("{input_2}")).unwrap();
-                ctrl.advance(1.0).unwrap();
-                let output: f64 = ctrl.get_outputs(&[2]).unwrap()[&2].parse().unwrap();
-                if Some(output) == prev {
-                    if verbose {
-                        eprintln!("{input_1} xor {input_2} = {output}")
-                    };
-                    let correct: f64 = (input_1 != input_2) as i64 as f64;
-                    distance += (correct - output).abs();
-                    steadystate = true;
-                    break;
-                }
-                prev = Some(output);
+                ctrl.advance(0.001).unwrap();
             }
-            if !steadystate {
-                return f64::NAN;
-            }
+            let output: f64 = ctrl.get_outputs(&[0]).unwrap()[&0].parse().unwrap();
+            let output = output.clamp(0.0, 1.0);
+            // assert!((0.0..=1.0).contains(&output), "{}", output);
+            let correct: f64 = (input_1 != input_2) as i64 as f64;
+            distance += (correct - output).abs();
+            if verbose {
+                eprintln!("{input_1} xor {input_2} = {output}")
+            };
         }
     }
     let score = (4.0 - distance).powi(2);

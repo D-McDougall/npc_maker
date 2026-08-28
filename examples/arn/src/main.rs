@@ -69,7 +69,6 @@ impl API for RegulatoryNetwork {
         format!("{value}")
     }
     fn advance(&mut self, dt: f64) {
-        let gamma = 0.1;
         let mut input_delta = Array1::<f64>::zeros(self.num_states());
         for (index, value) in self.queue.drain(..) {
             for gene_index in &self.inputs[index] {
