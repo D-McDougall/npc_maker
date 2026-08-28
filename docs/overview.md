@@ -30,11 +30,11 @@ which are also one-to-many relationships.
 ## Interface Specifications ##
 
 The NPC Maker interfaces are documented in the following chapters:
-* [Simulated Environments](/docs/environments.md)
-* [Control Systems](/docs/controllers.md)
-* [Individual Files](/docs/individuals.md)
-* [Genetic Algorithms](/docs/genetics.md)
-* [Evolutionary Algorithms](/docs/evolution.md)
+* [The Environment Interface](/docs/environments.md)
+* [The Controller Interface](/docs/controllers.md)
+* [The Individual Interface](/docs/individuals.md)
+* [The Genetic Interface](/docs/genetics.md)
+* [The Evolution Interface](/docs/evolution.md)
 
 ### Standard Input Channel ###
 
@@ -59,10 +59,14 @@ messages. This channel is assumed to be UTF-8 encoded. Functions `eprint()`
 processes inherit standard error from their parent process, which should in
 turn forward its standard error to the user or a log file as appropriate.
 
+### Errors and Termination ###
+
 In the event that any of the three standard I/O channels closes or emits an
 error, then all parties should assume the other party has died and act
-accordingly. To signal program termination without deadlocking: close both
-standard input and output channels.
+accordingly.
+
+To signal program termination without deadlocking: close both standard input
+and output channels.
 
 ## Directory Structure ##
 
