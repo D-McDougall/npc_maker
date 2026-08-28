@@ -1,4 +1,4 @@
-//! Controller Interface, for making and using control systems.
+//! Controller Interface, for making and using control systems
 //!
 //! Each controller runs in its own computer process and uses its standard I/O
 //! channels to communicate with the environment. The interface reserves the

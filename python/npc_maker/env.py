@@ -1,9 +1,10 @@
 """
 Environment Interface, for making and using environments.
 
-All global functions in this module are for implementing environment programs.
+Global functions in this module are for implementing environment programs.
 """
 
+from .utils import eprint, readline, readbytes, writeline
 from pathlib import Path
 import collections
 import datetime
@@ -32,7 +33,7 @@ def _timestamp():
 
 def Specification(env_spec_path):
     """
-    Load an environment specification from file.
+    Load an environment specification from file
     """
     # Clean up the filesystem path argument.
     env_spec_path = Path(env_spec_path).expanduser().resolve()
@@ -251,19 +252,9 @@ def _help_message(env_spec):
             message += line + "\n"
     return message
 
-def eprint(*args, **kwargs):
-    """
-    Print to stderr
-
-    The NPC Maker uses the environment program's stdin & stdout to communicate
-    with the main program via a standardized JSON-based protocol. Unformatted
-    diagnostic and error messages should be written to stderr using this function.
-    """
-    print(*args, **kwargs, file=sys.stderr, flush=True)
-
 def get_args():
     """
-    Read the command line arguments for an NPC Maker environment program.
+    Read the command line arguments for an NPC Maker environment program
 
     Returns a tuple of (environment-specification, graphics-mode, settings-dict)
     """
@@ -306,85 +297,64 @@ def get_args():
 
 def input():
     """
-    Read the next individual from the evolution program, blocking.
+    Read the next individual from the evolution program, blocking
 
-    New individual must be requested before calling this with the spawn() and
-    mate() functions.
+    A new individual must be requested before calling this with the
+    spawn() and mate() functions.
     """
-    message = b''
-    while True:
-        char = sys.stdin.buffer.read1(1)
-        if not char:
-            raise EOFError
-        if char == b'\n':
-            break
-        else:
-            message += char
-    message = json.loads(message)
-    num_bytes = int(message["genome"])
-    message["genome"] = sys.stdin.buffer.read(num_bytes)
-    return message
-
-def _try_print(*args, **kwargs):
-    # If the stdout channel is simply closed, then quietly exit.
-    # For other more abnormal conditions raise the error to the user.
-    try:
-        print(*args, **kwargs, file=sys.stdout, flush=True)
-    except BrokenPipeError:
-        sys.stdin.close()
-    except ValueError:
-        if sys.stdout.closed:
-            sys.stdin.close()
-        else:
-            raise
+    message = readline()
+    individual = json.loads(message)
+    num_bytes = int(individual["genome"])
+    individual["genome"] = readbytes(num_bytes)
+    return individual
 
 def spawn(body_type=None):
     """
-    Request a new individual from this body_type's evolution API.
+    Request a new individual from this body_type's evolution API
 
     Argument body_type is optional if the environment has exactly one body_type.
     """
     if body_type is not None:
         body_type = str(body_type)
-    _try_print(json.dumps({"Spawn": body_type}))
+    writeline(json.dumps({"Spawn": body_type}))
 
 def mate(*parents):
     """
-    Request to mate specific individuals together to produce a child individual.
+    Request to mate specific individuals together to produce a child individual
     """
     parents = [str(p) for p in parents]
     assert len(parents) > 0
-    _try_print(json.dumps({"Mate": parents}))
+    writeline(json.dumps({"Mate": parents}))
 
 def score(name, score):
     """
-    Report an individual's score or reproductive fitness to the evolution API.
+    Report an individual's score or reproductive fitness to the evolution API
 
     This should be called *before* calling "death()" on the individual.
     """
     name = str(name)
     score = str(score)
-    _try_print(json.dumps({"Score": score, "name": name}))
+    writeline(json.dumps({"Score": score, "name": name}))
 
 def telemetry(name, info):
     """
-    Report extra information about an individual.
+    Report extra information about an individual
 
     Argument info is a mapping of string key-value pairs.
     """
     name = str(name)
     info = {str(key) : str(value) for key, value in info.items()}
-    _try_print(json.dumps({"Telemetry": info, "name": name}))
+    writeline(json.dumps({"Telemetry": info, "name": name}))
 
 def death(name):
     """
-    Notify the evolution API that the given individual has died.
+    Notify the evolution API that the given individual has died
 
     The individual's score or reproductive fitness should be reported
     using the "score()" function *before* calling this method.
     """
     name = str(name)
-    _try_print(json.dumps({"Death": name}))
+    writeline(json.dumps({"Death": name}))
 
 class SoloAPI:
     """
@@ -436,7 +406,7 @@ class SoloAPI:
     @classmethod
     def main(cls):
         """
-        Run the environment program.
+        Run the environment program
 
         This function handles communications between the environment
         (this program) and the evolution program, which execute in separate
@@ -475,8 +445,9 @@ class SoloAPI:
 
 class Environment:
     """
-    This class encapsulates an instance of an environment and provides methods
-    for using environments.
+    An environment instance
+
+    This class provides methods for running and using environments.
 
     Each environment instance execute in its own subprocess
     and communicates with the caller over its standard I/O channels.

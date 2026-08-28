@@ -10,10 +10,10 @@ channels are UTF-8 unless otherwise stated.
 
 ## Command Line Invocation ##
 
-Controller programs are totally specified by their command line invocation. Both
-the program name and its arguments are considered part of the controller's
-identity. The evolution service provides the command line invocation to the
-environment, which should simply invoke it in a subprocess or at a shell.
+Controller programs are totally specified by their command line invocation.
+Both the program name and its arguments are considered part of the
+controller's identity. The command line invocation for the controller is
+provided to the environment, which should invoke it in a subprocess or shell.
 
 
 ## Standard Input Channel ##
@@ -24,11 +24,12 @@ following table summarizes the message types. The parts of the message format
 written in `[ALL_CAPS_AND_BRACKETS]` are placeholders for runtime data. In all
 messages the `[NUM]` and `[BYTES]` arguments form a binary array. 
 `[ID]` are non-negative integers that identify sensor and motor interfaces.
+By convention, sensor and motor interfaces are enumerated, separately, starting at zero.
 
 |  Message Type | Message Format | Arguments | Description |
 | :------------ | :------------- | :-------- | ----------- |
 | Environment | `E[ENV_SPEC]\n` | `[ENV_SPEC]` is the filesystem path of the environment specification file | This message is always sent exactly once at the controller's startup, before any other messages |
-| Population | `P[POPULATION]\n` | `[POPULATION]` is a name and a key into the environment specification's "populations" table | This message is always sent exactly once at the controller's startup, before any other messages |
+| BodyType | `P[BODY_TYPE]\n` | `[BODY_TYPE]` is a name and a key into the environment specification's "body_types" table | This message is always sent exactly once at the controller's startup, before any other messages |
 | Genome | `G[NUM]\n[BYTES]` | The parameters for the new controller | Discard the current model and load a new one |
 | Reset | `R\n` |  | Reset the currently loaded model to it's initial state |
 | Advance | `A[DT]\n` | `[DT]` is the time period to advance over, measured in seconds | Advance the state of the controller |
@@ -55,8 +56,9 @@ channel. Output messages should only be sent in response to specific requests.
 ## Standard Error Channel ##
 
 The standard error channel is for unformatted diagnostic and error messages.
-By default controllers inherit their `stderr` channel from their environment.
+By default controllers inherit their `stderr` channel from the environment simulation program.
 
-In the event that any of the three standard I/O channels closes or emits an error,
-then all parties should assume that the controller program is dead and act accordingly.
+In the event that any of the three standard I/O channels closes or emits an
+error, then all parties should assume that the controller program is dead and
+act accordingly.
 

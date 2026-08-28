@@ -1,14 +1,14 @@
 @startuml
 skinparam componentStyle rectangle
 
-frame "The Environment Process" as env_proc {
+frame "Environment Process" as env_proc {
 
   component instance <<class>> [
     **npc_maker.ctrl.Controller**
 
     .. // constructor arguments // ..
     * environment specification
-    * population name
+    * body_type name
     * controller command
     * stderr
     
@@ -37,14 +37,13 @@ frame "The Environment Process" as env_proc {
 stdin -[hidden]- stdout
 stdout -[hidden]- stderr
 
-frame "The Controller Sub-Process" as ctrl_proc {
+frame "Controller Sub-Process" as ctrl_proc {
 
   component main <<file>> [
     **main.py**
     
-    1| env_spec, pop = npc_maker.ctrl.get_args()
-    2| controller = MyController()
-    3| controller.main()
+    1| controller = MyController()
+    2| controller.main()
   ]
 
   component main_loop <<functions>> [

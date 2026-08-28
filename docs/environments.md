@@ -1,15 +1,15 @@
 # The Environment Interface #
 
-This chapter describes the interface between evolution programs and environment programs.
-The word "**environment**" refers to a self contained simulated world and
+This chapter describes the interface between router programs and environment programs.
+The word "**environment**" refers to a self-contained simulated world and
 everything in it, including all of the living bodies and their control systems. 
 The NPC Maker defines a standard interface for interacting with arbitrary environments.
 
 Environments always execute in a different computer process than the main
-program of the NPC Maker framework, which is referred to as
-the "**evolution**" program. This separation has many advantages, chiefly that
-user can create and control environments using the programming language of
-their choice.
+router program of the NPC Maker framework, which is referred to as
+the "**evolution**" program. This separation has many advantages, chiefly
+that users can create and control environments using the programming language
+of their choice.
 
 Environments have two parts: a static description and an executable program.
 The static description contains all of the information needed to configure and
@@ -19,23 +19,22 @@ and running the environment.
 
 ## Environment Specification ##
 
-The environment specification totally describes a single distinct and self
-contained environment. It is a JSON file encoded in UTF-8. It should use
-the ".env" file extension although this is not required. The file contains a
-single JSON object. The following table shows all of the expected attributes of
-the object. 
+The environment specification completely describes a single distinct and
+self-contained environment. It is a JSON file encoded in UTF-8. It must use
+the ".env" file extension. The file contains a single JSON object. The
+following table shows all of the expected attributes of the object. 
 
 | Attribute | JSON Type | Default Value | Description |
 | :-------- | :-------: | :------------ | :---------- |
 | `"name"`   | String | Required | Name of the environment, should be universally unique |
-| `"path"`   | String | Required | Filesystem path of the environment's executable program, relative to this file |
+| `"path"`   | String | Required | Filesystem path of the environment's executable program, relative to this file's parent directory |
 | `"spec"`   | String | Automatic | Filesystem path of the environment specification (this file) |
 | `"body_types"` | Array of BodySpecs | Required | Specification for each type of organism |
 | `"settings"` | Array of Settings | `[]` | Settings menu items for customizing the environment |
 | `"description"` | String | `""` | User facing documentation message |
 | Unspecified | Any |  | Environments may include extra information |
 
-Extra attributes are simply ignored and so you can store miscellaneous data in
+Extra attributes are simply ignored so users may store miscellaneous data in
 this file. This file is given to the environment program as a command line
 argument, which allows one environment program to be reconfigured for multiple
 different scenarios.
@@ -131,14 +130,14 @@ specification.
 
 ## Environment Protocol ##
 
-The evolution program communicates with the environment over the environment's
+The router program communicates with the environment over the environment's
 `stdin`, `stdout` and `stderr` channels. When `stdin` closes the environment
 should exit.
 
 
 ### Standard Input Channel ###
 
-The evolution program sends new individuals to the environment. The environment
+The router program sends new individuals to the environment. The environment
 must request new individuals; new individuals will not be sent unsolicited.
 
 Individuals are transmitted in two parts. First metadata is encoded in UTF-8
@@ -157,14 +156,14 @@ information about the new individual:
 
 ### Standard Output Channel ###
 
-The environment sends commands and data to the evolution program. Each
+The environment sends commands and data to the router program. Each
 message occupies exactly one line, and is encoded in the UTF-8 JSON format.
-Words in ALLCAPS are placeholders for runtime data.  
+Words in ALLCAPS are placeholders for runtime data, which are all strings.  
 
 | Message Type | Message Format | Description |
 | :----------- | :------------- | :---------- |
 | Spawn | `{"Spawn":"BODY_TYPE"}\n` | Request a new individual from the evolutionary algorithm |
-| Mate  | `{"Mate":["UUID","UUID"]}\n` | Request a new individual by mating individuals together. This requires at least one parent. This accepts more than two parents. All parents must be alive, in this environment, and members of the same body_type |
+| Mate  | `{"Mate":["UUID","UUID"]}\n` | Request a new individual by mating individuals together. This requires at least one parent. This accepts more than two parents. All parents must be alive, in this environment, and having the same body_type |
 | Score | `{"Score":"VALUE","name":"UUID"}\n` | Report the score or reproductive fitness of a living individual |
 | Telemetry | `{"Telemetry":{"KEY":"VALUE"},"name":"UUID"}\n` | The environment associates some extra information with a living individual. The info is kept alongside the individual in perpetuity |
 | Death | `{"Death":"UUID"}\n` | Report the death of an individual |
@@ -173,7 +172,7 @@ Words in ALLCAPS are placeholders for runtime data.
 ### Standard Error Channel ###
 
 The `stderr` channel is reserved for communicating errors and diagnostic
-information from the environment program to the evolution program. The
-`stderr` channel has no specific message format or protocol. By default
-environments inherit their `stderr` channel from their evolution program.
+information from the environment program to the user. The `stderr` channel
+has no specific message format or protocol. By default environments inherit
+`stderr` from the router program.
 

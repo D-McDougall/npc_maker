@@ -1,14 +1,17 @@
 @startuml
 left to right direction
 
-title The NPC Maker\nSystem Organization
+skinparam defaultTextAlignment center
 
+[Router\nProgram] as router
 [Evolutionary\nAlgorithms] as evo
+[Genetic\nAlgorithms] as gen
 [Simulated\nEnvironments] as env
 [Control\nSystems] as ctrl
 
-evo -- env
-env - ctrl
-evo - ctrl
+gen <-- router
+evo <-- router
+router --> env
+env -> ctrl
 
 @enduml
