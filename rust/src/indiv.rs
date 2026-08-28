@@ -306,4 +306,12 @@ mod tests {
         let unique = 1000;
         assert_eq!((0..unique).map(|_| uuid4()).collect::<HashSet<String>>().len(), unique);
     }
+    #[test]
+    fn indiv_save_load() {
+        let mut a = Individual::new("env", "body", &["ctrl"], Box::new(*b"genome"));
+        let path = a.save("").unwrap();
+        let b = Individual::load(path).unwrap();
+        assert_eq!(a, b);
+        b.delete().unwrap();
+    }
 }
