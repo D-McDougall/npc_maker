@@ -119,18 +119,18 @@ impl Individual {
     /// Get the genetic parameters for this individual. This loads the genome
     /// from file if necessary.
     pub fn genome(&self) -> Result<Arc<[u8]>> {
-        self.genome
+        Ok(self
+            .genome
             .get_or_init(|| {
+                // Unwrap everything because "get_or_try_init" is unstable.
                 let path = self.path.as_ref().expect("missing genome");
-                // Safe to unwrap this file access, because we already accessed
-                // this file at least once since the start of this program run.
-                let mut file = BufReader::new(File::open(path)?);
+                let mut file = BufReader::new(File::open(path).unwrap());
                 file.skip_until(b'\0').expect("missing genome");
                 let mut data = vec![];
-                file.read_to_end(&mut data)?;
+                file.read_to_end(&mut data).unwrap();
                 Arc::from(data)
             })
-            .clone()
+            .clone())
     }
 
     /// Asexually reproduce an individual
@@ -225,7 +225,7 @@ impl Individual {
         let mut buf = BufWriter::new(file);
         serde_json::to_writer(&mut buf, self).unwrap();
         buf.write_all(b"\0")?;
-        buf.write_all(&self.genome())?;
+        buf.write_all(&self.genome()?)?;
         let file = buf.into_inner()?; // flush the buffer
         file.sync_all()?; // push to disk
         std::fs::rename(&temp, &path)?; // move file into place
