@@ -7,6 +7,8 @@ Evolutionary algorithms and supporting tools.
 #   * Population: python and rust use different file structures, rust version is better.
 #   * Evolution: folded into Population class, rename Population to Evolution.
 
+from npc_maker.indiv import Individual
+from npc_maker.evo import API, eprint
 from pathlib import Path
 import copy
 import io
@@ -68,11 +70,8 @@ class Population:
     This class manage individuals in a single population without replacement.
     Individuals are added but never removed. The population grows without bounds.
     """
-    def __init__(self, genome_cls, path, population_size=0, leaderboard=0, hall_of_fame=0, score="score"):
+    def __init__(self, path, population_size=0, leaderboard=0, hall_of_fame=0, score="score"):
         """
-        Argument genome_cls should be either a subclass of Genome or a suitable
-                 factory function to produce Genomes from byte string.
-
         Argument path is the directory to record data to. This class will
                  incorporate any existing data in the directory to resume after
                  a program shutdown.
@@ -93,7 +92,6 @@ class Population:
         Argument score is an optional custom scoring function,
                  see method: Individual.get_custom_score
         """
-        self._genome_cls = genome_cls
         self._path = self._clean_path(path)
         self._lock = threading.RLock()
         self._load_metadata()
@@ -185,7 +183,7 @@ class Population:
     def _load_members(self):
         self._members = []
         for file in _scan_dir(self.get_path()):
-            self._members.append(Individual.load(self._genome_cls, file))
+            self._members.append(Individual.load(file))
         self._members.sort(key=lambda individual: individual.get_ascension())
 
     def _load_leaderboard(self):
@@ -194,7 +192,7 @@ class Population:
         if not leaderboard_dir.exists():
             leaderboard_dir.mkdir()
         for file in _scan_dir(leaderboard_dir):
-            self._leaderboard_data.append(Individual.load(self._genome_cls, file))
+            self._leaderboard_data.append(Individual.load(file))
         self._sort_by_score(self._leaderboard_data)
 
     def _sort_by_score(self, data):
@@ -210,7 +208,7 @@ class Population:
         if not hall_of_fame_dir.exists():
             hall_of_fame_dir.mkdir()
         for file in _scan_dir(hall_of_fame_dir):
-            self._hall_of_fame_data.append(Individual.load(self._genome_cls, file))
+            self._hall_of_fame_data.append(Individual.load(file))
         # Sort the individuals chronologically.
         self._hall_of_fame_data.sort(key=lambda x: x.get_ascension())
 
@@ -278,7 +276,7 @@ class Population:
         return self._generation
 
     def _get_generation_members(self):
-        return [Individual.load(self._genome_cls, file)
+        return [Individual.load(file)
                 for file in _scan_dir(self._get_generation_path())]
 
     def _prepare_individual(self, individual) -> 'Individual':
@@ -289,7 +287,7 @@ class Population:
             return
         # 
         if isinstance(individual, str) or isinstance(individual, Path):
-            individual = Individual.load(self._genome_cls, individual)
+            individual = Individual.load(individual)
         else:
             assert isinstance(individual, Individual)
             assert individual._genome_cls is self._genome_cls
@@ -422,24 +420,6 @@ class Overflowing(Population):
                 remove.path.unlink()
             super().add(individual)
 
-class Evolution:
-    """
-    Abstract class for implementing evolutionary algorithms.
-
-    Both the spawn and death methods should be thread-safe.
-    """
-    def spawn(self):
-        """
-        Returns a new individual to be born into the environment.
-        """
-        raise TypeError("abstract method called")
-
-    def death(self, individual):
-        """
-        Notification of an individual's death.
-        """
-        raise TypeError("abstract method called")
-
 class Replayer(Evolution):
     """
     Replay saved individuals
@@ -480,7 +460,7 @@ class Replayer(Evolution):
                 self._buffer.extend(self._members[i] for i in indices)
             individual = self._buffer.pop()
         # Reload into a new instance for the environment to modify.
-        return Individual.load(self._genome_cls, individual.get_path())
+        return Individual.load(individual.get_path())
 
     def death(self, individual):
         pass
@@ -488,86 +468,9 @@ class Replayer(Evolution):
     def _scan(self):
         if self._scan_time == os.path.getmtime(self._path):
             return
-        self._members = [Individual.load(self._genome_cls, file)
+        self._members = [Individual.load(file)
                          for file in _scan_dir(self._path)]
         self._scores = [individual.get_custom_score(self._score)
                         for individual in self._members]
         self._buffer = []
         self._scan_time = os.path.getmtime(self._path)
-
-class Neat(Evolution, Generation):
-    """
-    """
-    def __init__(self, seed,
-            population_size,
-            species_distribution,
-            mate_selection,
-            score="score",
-            path=None,
-            leaderboard=0,
-            hall_of_fame=0,):
-        """
-        Argument seed is the initial individual to begin evolution from.
-        """
-        # Clean and save the arguments.
-        assert isinstance(seed, Individual)
-        assert seed.get_controller()
-        Generation.__init__(self, seed._genome_cls, path, population_size, leaderboard, hall_of_fame, score)
-        self.species_distribution   = species_distribution
-        self.mate_selection         = mate_selection
-        self.score         = score
-        # Setup our internal data structures.
-        self._sort_species()
-        # The zeroth generation only contains the seed, and is immediately
-        # processed so the user never sees generation zero.
-        if not self._members:
-            if seed.score is None:
-                seed.score = 0.0
-            self.add(seed)
-            self._rollover()
-
-    def _sort_species(self):
-        self._parents   = [] # Pairs of individuals, buffer of potential mates.
-        self._species   = {} # Species UUID -> (avg-score, members-list).
-        # Sort the individuals by species.
-        for individual in self._members:
-            self._species.setdefault(individual.get_species(), []).append(individual)
-        # Calculate each species' average score.
-        for uuid, members in self._species.items():
-            score = sum(individual.get_custom_score(self._score) for individual in members) / len(members)
-            self._species[uuid] = (score, members)
-
-    def _rollover(self):
-        super()._rollover()
-        self._sort_species()
-
-    def _sample(self):
-        """
-        Refill the _parents buffer.
-        """
-        # Distribute the offspring to species according to their average score.
-        scores = [score for (score, members) in self._species.values()]
-        selected = self.species_distribution.select(self._population_size, scores)
-        # Count how many offspring were allocated to each species.
-        histogram = [0 for _ in range(len(self._species))]
-        for x in selected:
-            histogram[x] += 1
-        # Sample parents from each species.
-        for (num_offspring, (_, members)) in zip(histogram, self._species.values()):
-            scores = [individual.get_custom_score(self._score) for individual in members]
-            for pair in self.mate_selection.pairs(num_offspring, scores):
-                self._parents.append([members[index] for index in pair])
-        # 
-        random.shuffle(self._parents)
-
-    def spawn(self):
-        with self._lock:
-            if not self._parents:
-                self._sample()
-            mother, father = self._parents.pop()
-        if mother.get_custom_score(self._score) < father.get_custom_score(self._score):
-            mother, father = father, mother
-        return mother.mate(father)
-
-    def death(self, individual):
-        self.add(individual)
