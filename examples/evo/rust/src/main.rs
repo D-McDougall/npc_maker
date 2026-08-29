@@ -1,7 +1,8 @@
-//! Evolutionary algorithms and supporting tools.
+//! Evolutionary algorithms and supporting tools
 
-use crate::indiv::Individual;
+use clap::{Parser, Subcommand, ValueEnum};
 use mate_selection::MateSelection;
+use npc_maker::indiv::Individual;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, BufWriter, Error, Read, Write};
@@ -9,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// Controls how a population replaces its members once it's full.
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(ValueEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Replacement {
     /*
     /// Do not add or remove members.
@@ -49,7 +50,8 @@ pub enum Replacement {
 /// | 2 | Sexually reproduce the parents |
 /// | 3+ | Unspecified |
 ///
-pub type Selection = dyn Fn(&[Arc<Mutex<Individual>>], usize) -> Vec<Vec<Arc<Mutex<Individual>>>> + Send + Sync;
+pub type Selection =
+    dyn Fn(&[Arc<Mutex<Individual>>], usize) -> Vec<Vec<Arc<Mutex<Individual>>>> + Send + Sync;
 
 fn default_selection(population_size: usize, score: Arc<Score>) -> Arc<Selection> {
     const MEDIAN_PERCENT: f64 = 0.1;
@@ -84,7 +86,9 @@ fn default_score(individual: &Individual) -> f64 {
     }
 }
 
-fn compare_scores(score_fn: &Score) -> impl Fn(&Arc<Mutex<Individual>>, &Arc<Mutex<Individual>>) -> std::cmp::Ordering {
+fn compare_scores(
+    score_fn: &Score,
+) -> impl Fn(&Arc<Mutex<Individual>>, &Arc<Mutex<Individual>>) -> std::cmp::Ordering {
     move |a, b| {
         let a_score = score_fn(&a.lock().unwrap());
         let b_score = score_fn(&b.lock().unwrap());
@@ -97,27 +101,6 @@ fn compare_scores(score_fn: &Score) -> impl Fn(&Arc<Mutex<Individual>>, &Arc<Mut
         .reverse()
     }
 }
-
-// TOOD: Consider introducing a mutex lock into the population so that
-// Evolution.spawn() and Evolution.death() are immutable. This would allow finer
-// grained locking: move the file-system tasks out of the mutex-locked critical
-// section.
-//
-// Pseudo Code:
-//
-// fn spawn(&self)
-//      1) lock mutex
-//      2) refill parents queue if empty
-//      3) pop & return parent group
-//      4) release mutex
-//
-// fn death(&self, individual)
-//      1) individual.save()
-//      2) lock mutex
-//      3) reckon the population
-//      4) release mutex
-//      5) delete individuals
-//
 
 /// Container for an evolving population of individuals.
 ///
@@ -207,7 +190,8 @@ impl Evolution {
         //
         let score = score.unwrap_or_else(|| Arc::new(default_score));
         //
-        let selection = selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
+        let selection =
+            selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
         //
         let mut this = Evolution {
             path,
@@ -251,17 +235,24 @@ impl Evolution {
         self.ascension = metadata.ascension;
         self.generation = metadata.generation;
         //
-        let individuals: HashMap<String, Arc<Mutex<Individual>>> = Individual::load_dir(&self.path)?
-            .into_iter()
-            .map(|individual| (individual.name.to_string(), Arc::from(Mutex::from(individual))))
-            .collect();
+        let individuals: HashMap<String, Arc<Mutex<Individual>>> =
+            Individual::load_dir(&self.path)?
+                .into_iter()
+                .map(|individual| {
+                    (
+                        individual.name.to_string(),
+                        Arc::from(Mutex::from(individual)),
+                    )
+                })
+                .collect();
         let lookup = |individual: &String| individuals.get(individual).unwrap().clone();
         self.members = metadata.members.iter().map(lookup).collect();
         self.waiting = metadata.waiting.iter().map(lookup).collect();
         self.leaderboard = metadata.leaderboard.iter().map(lookup).collect();
         self.hall_of_fame = metadata.hall_of_fame.iter().map(lookup).collect();
         // Sort the historical data to enforce invariants.
-        self.leaderboard.sort_by(compare_scores(self.score.as_ref()));
+        self.leaderboard
+            .sort_by(compare_scores(self.score.as_ref()));
         self.hall_of_fame
             .sort_by_key(|x| x.lock().unwrap().ascension.unwrap_or(u64::MAX));
         Ok(())
@@ -316,7 +307,8 @@ impl Evolution {
             };
             let members = self.get_members();
             assert!(!members.is_empty(), "population is empty");
-            self.parents.extend_from_slice(&(*self.selection)(members, num_pairs));
+            self.parents
+                .extend_from_slice(&(*self.selection)(members, num_pairs));
         }
         let mut parents = self.parents.pop().unwrap();
         // Deduplicate the parents list.
@@ -371,7 +363,10 @@ impl Evolution {
         }
         // Save the individual into the current generation.
         match self.replacement {
-            Replacement::Unbounded | Replacement::Random | Replacement::Worst | Replacement::Oldest => {
+            Replacement::Unbounded
+            | Replacement::Random
+            | Replacement::Worst
+            | Replacement::Oldest => {
                 self.members.push(individual.clone());
             }
             Replacement::Generation => {}
@@ -412,7 +407,8 @@ impl Evolution {
                 .cloned(),
         );
         // Use stable sort to preserve ascension ordering.
-        self.leaderboard.sort_by(compare_scores(self.score.as_ref()));
+        self.leaderboard
+            .sort_by(compare_scores(self.score.as_ref()));
         // Remove low performing individuals from the leaderboard directory.
         if self.leaderboard.len() > self.leaderboard_size {
             for individual in self.leaderboard.drain(self.leaderboard_size..) {
@@ -450,23 +446,13 @@ impl Evolution {
 }
 
 fn main() {
-    println!("Hello, world!");
+    args = Cli::parse();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn indiv_save_load() {
-        let mut indiv1 = Individual::new("foo", "bar", &["ctrl", "prog"], Box::new(*b"beepboop"));
-        indiv1.extra.insert("X".into(), "Y".into());
-        let path = dbg!(indiv1.save(std::env::temp_dir())).unwrap();
-        let indiv2 = Individual::load(path).unwrap();
-        indiv1.genome();
-        indiv2.genome();
-        assert_eq!(indiv1, indiv2);
-    }
     #[test]
     fn pop_save_load() {
         let mut pop1 = Evolution::new("", None, None, None, 10, 3, 2).unwrap();
@@ -495,8 +481,14 @@ mod tests {
             stubs
         }
         assert_eq!(cmp_indiv(pop1.get_members()), cmp_indiv(pop2.get_members()));
-        assert_eq!(cmp_indiv(pop1.get_leaderboard()), cmp_indiv(pop2.get_leaderboard()));
-        assert_eq!(cmp_indiv(pop1.get_hall_of_fame()), cmp_indiv(pop2.get_hall_of_fame()));
+        assert_eq!(
+            cmp_indiv(pop1.get_leaderboard()),
+            cmp_indiv(pop2.get_leaderboard())
+        );
+        assert_eq!(
+            cmp_indiv(pop1.get_hall_of_fame()),
+            cmp_indiv(pop2.get_hall_of_fame())
+        );
         assert_eq!(pop2.get_members().len(), 10);
         assert_eq!(pop2.get_leaderboard().len(), 3);
         assert_eq!(pop2.get_hall_of_fame().len(), 6);
@@ -550,7 +542,11 @@ mod tests {
             }
         }
         fn eval(a: &[u8], b: &[u8]) -> String {
-            let abs_dif = a.iter().zip(b).map(|(&x, &y)| (x as f64 - y as f64).abs()).sum::<f64>();
+            let abs_dif = a
+                .iter()
+                .zip(b)
+                .map(|(&x, &y)| (x as f64 - y as f64).abs())
+                .sum::<f64>();
             (-abs_dif).to_string()
         }
         let target_genome = new_genome();
@@ -586,7 +582,15 @@ mod tests {
             println!("{}", indiv.lock().unwrap().score.as_ref().unwrap());
         }
         let best = evo.get_leaderboard()[0].clone();
-        assert!(best.lock().unwrap().score.as_ref().unwrap().parse::<f64>().unwrap() > -100.0);
+        assert!(
+            best.lock()
+                .unwrap()
+                .score
+                .as_ref()
+                .unwrap()
+                .parse::<f64>()
+                .unwrap()
+                > -100.0
+        );
     }
 }
-

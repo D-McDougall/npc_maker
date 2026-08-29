@@ -138,4 +138,9 @@ impl Evolution {
         self.process.send_line(&message)?;
         Ok(())
     }
+
+    /// Send a non-standard command
+    pub fn custom(&mut self, command: &str, args: &[serde_json::Value]) -> Result<serde_json::Value, Error> {
+        todo!()
+    }
 }

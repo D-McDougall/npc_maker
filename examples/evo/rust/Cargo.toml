@@ -1,6 +1,12 @@
 [package]
-name = "evo"
-version = "0.1.0"
-edition = "2024"
+	name = "evo"
+	version = "0.1.0"
+	edition = "2024"
 
 [dependencies]
+	clap = { version = "4.6.0", features = ["derive"] }
+	mate_selection = "0.1.2"
+	npc_maker = {path = "../../../rust/"}
+	rand = "0.10.2"
+	serde = "1.0.229"
+	serde_json = "1.0.151"
