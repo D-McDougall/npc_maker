@@ -13,7 +13,8 @@ channels are UTF-8 unless otherwise stated.
 Controller programs are totally specified by their command line invocation.
 Both the program name and its arguments are considered part of the
 controller's identity. The command line invocation for the controller is
-provided to the environment, which should invoke it in a subprocess or shell.
+provided by the genetic algorithm, and the environment should invoke it in a
+subprocess.
 
 
 ## Standard Input Channel ##

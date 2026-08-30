@@ -13,6 +13,14 @@ This decouples the genetic representation from the control system implementation
 Genetic algorithms execute in isolated computer processes and communicate over
 the standard IO channels, which are encoded in UTF-8 unless otherwise stated.
 
+## Command Line Invocation ##
+
+Genetic programs are totally specified by their command line invocation.
+Both the program name and its arguments are considered part of the
+algorithm's identity.
+
+TODO: pass env spec and body type into here?
+
 ## Standard Input Channel ##
 
 Genetic algorithms receive commands over standard input. Genetic algorithms
@@ -53,7 +61,7 @@ However, it is an error to invoke an undefined command.
 Return values are written to standard output as JSON objects.
 
 Commands `asex` and `sex` return a genome-phenome pair, in the format:  
-`{"genome": GENOME, "phenome": PHENOME}\n`
+`{"ctrl": ["CTRL_CMD", "ARGS", ...], "genome": GENOME, "phenome": PHENOME}\n`
 
 Where `GENOME` and `PHENOME` are integer array lengths, encoded as ASCII
 decimal numbers. The new-line is immediately followed by the genome array and

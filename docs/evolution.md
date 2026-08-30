@@ -13,6 +13,14 @@ multiple body_types will need multiple instances.
 Evolutionary algorithms execute in isolated computer processes and communicate
 via their standard I/O channels using JSON messages, which are encoded in UTF-8.
 
+## Command Line Invocation ##
+
+Evolution programs are totally specified by their command line invocation.
+Both the program name and its arguments are considered part of the
+algorithm's identity.
+
+TODO: pass env spec and body type into here?
+
 ## Standard Input / Output Channels ##
 
 Evolutionary algorithms receive commands via their standard input channel.

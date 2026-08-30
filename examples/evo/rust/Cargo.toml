@@ -2,6 +2,7 @@
 	name = "evo"
 	version = "0.1.0"
 	edition = "2024"
+	description = "Evolutionary algorithms for the NPC Maker"
 
 [dependencies]
 	clap = { version = "4.6.0", features = ["derive"] }
