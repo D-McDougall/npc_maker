@@ -1,6 +1,12 @@
-//! Evolutionary algorithms and supporting tools
+//! Program for running evolutionary algorithms
+//!
+//! Features:
+//! * Many strategies for selecting individuals to spawn
+//! * Many strategies for replacing individuals on death
+//! * Persistent save files
+//! * Leaderboard
+//! * Hall of Fame
 
-use clap::{Parser, Subcommand, ValueEnum};
 use mate_selection::MateSelection;
 use npc_maker::indiv::Individual;
 use serde::{Deserialize, Serialize};
@@ -9,8 +15,40 @@ use std::io::{BufRead, BufReader, BufWriter, Error, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-/// Controls how a population replaces its members once it's full.
-#[derive(ValueEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+/// Main program data structure
+#[derive(Serialize, Deserialize)]
+pub struct Evolution {
+    path: PathBuf,
+
+    replacement: Replacement,
+
+    selection: String,
+
+    score: String,
+
+    population_size: usize,
+
+    leaderboard_size: usize,
+
+    hall_of_fame_size: usize,
+
+    ascension: u64,
+
+    generation: u64,
+
+    members: Vec<Arc<Mutex<Individual>>>,
+
+    waiting: Vec<Arc<Mutex<Individual>>>,
+
+    leaderboard: Vec<Arc<Mutex<Individual>>>,
+
+    hall_of_fame: Vec<Arc<Mutex<Individual>>>,
+
+    parents: Vec<Vec<Arc<Mutex<Individual>>>>,
+}
+
+/// Controls the population replaces individuals
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Replacement {
     /*
     /// Do not add or remove members.
@@ -28,8 +66,39 @@ pub enum Replacement {
     /// Replace the lowest scoring member.
     Worst,
 
+    // TODO: Rename generation to cohort?
     /// Replace generations entirely and all at once.
     Generation,
+}
+
+impl Evolution {
+    /// Parse the command line arguments
+    pub fn cli() -> Result<Self, Error> {
+        let args: Vec<String> = std::env::args().collect();
+        // if path was given: then load, else default;
+        let mut this = Self::default();
+        // overwrite with given args
+        todo!()
+        Ok(this)
+    }
+    fn default() -> Self {
+        Self {
+            path: PathBuf::new(),
+            replacement: todo!(),
+            selection: todo!(),
+            score: "score".to_string(),
+            population_size: 100,
+            leaderboard_size: 10,
+            hall_of_fame_size: 0,
+            ascension: 0,
+            generation: 0,
+            members: vec![],
+            waiting: vec![],
+            leaderboard: vec![],
+            hall_of_fame: vec![],
+            parents: vec![],
+        }
+    }
 }
 
 /// Evolutionary algorithms choose which parent to reproduce with this
@@ -50,25 +119,24 @@ pub enum Replacement {
 /// | 2 | Sexually reproduce the parents |
 /// | 3+ | Unspecified |
 ///
-pub type Selection =
-    dyn Fn(&[Arc<Mutex<Individual>>], usize) -> Vec<Vec<Arc<Mutex<Individual>>>> + Send + Sync;
+fn foobar() {}
 
-fn default_selection(population_size: usize, score: Arc<Score>) -> Arc<Selection> {
-    const MEDIAN_PERCENT: f64 = 0.1;
-    let median = (population_size as f64 * MEDIAN_PERCENT).round() as usize;
-    Arc::new(move |population, spawn| {
-        let rng = &mut rand::rng();
-        let scores: Vec<f64> = population
-            .iter()
-            .map(|individual| score(&individual.lock().unwrap()))
-            .collect();
-        let index = mate_selection::RankedExponential(median).pairs(rng, spawn, scores);
-        index
-            .iter()
-            .map(|parents| parents.iter().map(|&i| population[i].clone()).collect())
-            .collect()
-    })
-}
+// fn default_selection(population_size: usize, score: Arc<Score>) -> Arc<Selection> {
+//     const MEDIAN_PERCENT: f64 = 0.1;
+//     let median = (population_size as f64 * MEDIAN_PERCENT).round() as usize;
+//     Arc::new(move |population, spawn| {
+//         let rng = &mut rand::rng();
+//         let scores: Vec<f64> = population
+//             .iter()
+//             .map(|individual| score(&individual.lock().unwrap()))
+//             .collect();
+//         let index = mate_selection::RankedExponential(median).pairs(rng, spawn, scores);
+//         index
+//             .iter()
+//             .map(|parents| parents.iter().map(|&i| population[i].clone()).collect())
+//             .collect()
+//     })
+// }
 
 /// Individuals may have custom score functions with this type signature.
 ///
@@ -100,52 +168,6 @@ fn compare_scores(
         }
         .reverse()
     }
-}
-
-/// Container for an evolving population of individuals.
-///
-/// Features:
-/// * Several strategies for replacing individuals with new ones,
-/// * Persistence by saving to file,
-/// * A Leaderboard and Hall of Fame.
-pub struct Evolution {
-    path: PathBuf,
-
-    replacement: Replacement,
-
-    selection: Arc<Selection>,
-
-    score: Arc<Score>,
-
-    population_size: usize,
-
-    leaderboard_size: usize,
-
-    hall_of_fame_size: usize,
-
-    ascension: u64,
-
-    generation: u64,
-
-    members: Vec<Arc<Mutex<Individual>>>,
-
-    waiting: Vec<Arc<Mutex<Individual>>>,
-
-    leaderboard: Vec<Arc<Mutex<Individual>>>,
-
-    hall_of_fame: Vec<Arc<Mutex<Individual>>>,
-
-    parents: Vec<Vec<Arc<Mutex<Individual>>>>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct EvolutionMetadata {
-    ascension: u64,
-    generation: u64,
-    members: Vec<String>,
-    waiting: Vec<String>,
-    leaderboard: Vec<String>,
-    hall_of_fame: Vec<String>,
 }
 
 impl Evolution {
@@ -190,13 +212,13 @@ impl Evolution {
         //
         let score = score.unwrap_or_else(|| Arc::new(default_score));
         //
-        let selection =
-            selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
+        // let selection =
+        //     selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
         //
         let mut this = Evolution {
             path,
             replacement: replacement.unwrap_or(Replacement::Generation),
-            selection,
+            selection: selection.unwrap(),
             score,
             population_size,
             leaderboard_size,
@@ -296,88 +318,6 @@ impl Evolution {
     pub fn get_hall_of_fame(&self) -> &[Arc<Mutex<Individual>>] {
         &self.hall_of_fame
     }
-    /// Get a list of parents to be mated together to produce a child.
-    pub fn spawn(&mut self) -> Vec<Arc<Mutex<Individual>>> {
-        // Refill parents buffer.
-        if self.parents.is_empty() {
-            let num_pairs = if self.get_replacement() == Replacement::Generation {
-                self.get_population_size()
-            } else {
-                1
-            };
-            let members = self.get_members();
-            assert!(!members.is_empty(), "population is empty");
-            self.parents
-                .extend_from_slice(&(*self.selection)(members, num_pairs));
-        }
-        let mut parents = self.parents.pop().unwrap();
-        // Deduplicate the parents list.
-        parents.sort_unstable_by_key(Arc::as_ptr);
-        parents.dedup_by_key(|parent| Arc::as_ptr(parent));
-        parents
-    }
-    /// Add a new individual to this population.
-    pub fn death(&mut self, mut individual: Individual) -> Result<(), Error> {
-        debug_assert!(individual.ascension.is_none());
-        individual.ascension = Some(self.ascension);
-        self.ascension += 1;
-        //
-        individual.save(&self.path)?;
-        let individual = Arc::from(Mutex::from(individual));
-        // Make room in the current members list for another individual.
-        match self.replacement {
-            Replacement::Unbounded => {}
-            Replacement::Generation => {}
-            Replacement::Random => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let random_index = rand::random_range(0..self.members.len());
-                    let random_individual = self.members.swap_remove(random_index);
-                    Individual::drop(random_individual)?;
-                }
-            }
-            Replacement::Worst => {
-                let compare_scores = compare_scores(self.score.as_ref());
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (worst_index, _worst_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by(|a, b| compare_scores(a.1, b.1))
-                        .unwrap();
-                    let worst_individual = self.members.swap_remove(worst_index);
-                    Individual::drop(worst_individual)?;
-                }
-            }
-            Replacement::Oldest => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (oldest_index, _oldest_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
-                        .unwrap();
-                    let oldest_individual = self.members.swap_remove(oldest_index);
-                    Individual::drop(oldest_individual)?;
-                }
-            }
-        }
-        // Save the individual into the current generation.
-        match self.replacement {
-            Replacement::Unbounded
-            | Replacement::Random
-            | Replacement::Worst
-            | Replacement::Oldest => {
-                self.members.push(individual.clone());
-            }
-            Replacement::Generation => {}
-        }
-        // Stage the individual for the next generation and bookkeeping.
-        self.waiting.push(individual.clone());
-        if self.waiting.len() >= self.population_size {
-            self.rollover()?;
-        }
-        Ok(())
-    }
     /// Force the next generation to replace the current generation, even if the
     /// next generation has not reached the `population_size`. This is useful for
     /// seeding a population with initial genetic material and then making
@@ -445,8 +385,91 @@ impl Evolution {
     }
 }
 
-fn main() {
-    args = Cli::parse();
+// impl npc_maker::evo::API for Evolution {
+impl Evolution {
+    /// Get a list of parents to be mated together to produce a child.
+    fn spawn(&mut self) -> Vec<Arc<Mutex<Individual>>> {
+        // Refill parents buffer.
+        if self.parents.is_empty() {
+            let num_pairs = if self.get_replacement() == Replacement::Generation {
+                self.get_population_size()
+            } else {
+                1
+            };
+            let members = self.get_members();
+            assert!(!members.is_empty(), "population is empty");
+            todo!();
+            // self.parents
+            //     .extend_from_slice(&(*self.selection)(members, num_pairs));
+        }
+        let mut parents = self.parents.pop().unwrap();
+        // Deduplicate the parents list.
+        parents.sort_unstable_by_key(Arc::as_ptr);
+        parents.dedup_by_key(|parent| Arc::as_ptr(parent));
+        parents
+    }
+    /// Add a new individual to this population.
+    fn death(&mut self, mut individual: Individual) -> Result<(), Error> {
+        debug_assert!(individual.ascension.is_none());
+        individual.ascension = Some(self.ascension);
+        self.ascension += 1;
+        //
+        individual.save(&self.path)?;
+        let individual = Arc::from(Mutex::from(individual));
+        // Make room in the current members list for another individual.
+        match self.replacement {
+            Replacement::Unbounded => {}
+            Replacement::Generation => {}
+            Replacement::Random => {
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let random_index = rand::random_range(0..self.members.len());
+                    let random_individual = self.members.swap_remove(random_index);
+                    Individual::drop(random_individual)?;
+                }
+            }
+            Replacement::Worst => {
+                let compare_scores = compare_scores(self.score.as_ref());
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let (worst_index, _worst_individual) = self
+                        .members
+                        .iter()
+                        .enumerate()
+                        .min_by(|a, b| compare_scores(a.1, b.1))
+                        .unwrap();
+                    let worst_individual = self.members.swap_remove(worst_index);
+                    Individual::drop(worst_individual)?;
+                }
+            }
+            Replacement::Oldest => {
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let (oldest_index, _oldest_individual) = self
+                        .members
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
+                        .unwrap();
+                    let oldest_individual = self.members.swap_remove(oldest_index);
+                    Individual::drop(oldest_individual)?;
+                }
+            }
+        }
+        // Save the individual into the current generation.
+        match self.replacement {
+            Replacement::Unbounded
+            | Replacement::Random
+            | Replacement::Worst
+            | Replacement::Oldest => {
+                self.members.push(individual.clone());
+            }
+            Replacement::Generation => {}
+        }
+        // Stage the individual for the next generation and bookkeeping.
+        self.waiting.push(individual.clone());
+        if self.waiting.len() >= self.population_size {
+            self.rollover()?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -593,4 +616,12 @@ mod tests {
                 > -100.0
         );
     }
+}
+
+
+fn main() {
+    let mut args = Cli::parse();
+    dbg!(args);
+    // let mut evo = Evolution::new().unwrap();
+    // evo.main().unwrap();
 }
