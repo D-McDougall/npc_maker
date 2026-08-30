@@ -15,6 +15,11 @@ use std::io::{BufRead, BufReader, BufWriter, Error, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+fn main() {
+    let evo = Evolution::cli();
+    // evo.main().unwrap();
+}
+
 /// Main program data structure
 #[derive(Serialize, Deserialize)]
 pub struct Evolution {
@@ -47,7 +52,7 @@ pub struct Evolution {
     parents: Vec<Vec<Arc<Mutex<Individual>>>>,
 }
 
-/// Controls the population replaces individuals
+/// Controls how the population replaces individuals
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Replacement {
     /*
@@ -71,14 +76,45 @@ pub enum Replacement {
     Generation,
 }
 
+/// Methods to initialize, save, and load
 impl Evolution {
-    /// Parse the command line arguments
-    pub fn cli() -> Result<Self, Error> {
-        let args: Vec<String> = std::env::args().collect();
-        // if path was given: then load, else default;
+    /// Main entrypoint to initialize program state
+    fn cli() -> Result<Self, Error> {
+        // Get and unpack the args
+        let mut args: Vec<String> = std::env::args().collect();
+        // Discard the name of the program
+        if !args.is_empty() {
+            let prog = args.remove(0);
+        }
+        // Split the file path from args, if one was given
+        let arg0 = args.get(0);
+        let path = None;
+        if let Some(arg0) = arg0 {
+            if !arg0.starts_with('-') {
+                path = Some(PathBuf::new(arg0));
+                args.remove(0);
+            }
+        }
+        // Initialize or load from file
         let mut this = Self::default();
-        // overwrite with given args
-        todo!()
+        if let Some(path) = path
+            && !path.is_empty()
+        {
+            this.path = path;
+            if !path.exists() {
+                this.init()?;
+            } else {
+                this.load()?;
+            }
+        } else {
+            this.path = mktempdir();
+            this.init()?;
+        }
+        // Apply the remaining CLI arguments
+        if this.parse_args(args) {
+            // Update the save file with the new parameters
+            this.save()?;
+        }
         Ok(this)
     }
     fn default() -> Self {
@@ -98,6 +134,195 @@ impl Evolution {
             hall_of_fame: vec![],
             parents: vec![],
         }
+    }
+    /// Parse the command line arguments
+    fn parse_args(args: Vec<String>) -> bool {
+        todo!()
+    }
+    /// Initialize file & directory structures
+    fn init(path: &Path) -> Result<(), Error> {
+        std::fs::create_dir(&path)?;
+    }
+    fn save(&self) -> Result<(), Error> {
+        let get_name = |indiv: &Arc<Mutex<Individual>>| indiv.lock().unwrap().name.clone();
+        let metadata = EvolutionMetadata {
+            ascension: self.ascension,
+            generation: self.generation,
+            members: self.members.iter().map(get_name).collect(),
+            waiting: self.waiting.iter().map(get_name).collect(),
+            leaderboard: self.leaderboard.iter().map(get_name).collect(),
+            hall_of_fame: self.hall_of_fame.iter().map(get_name).collect(),
+        };
+        let path = self.get_metadata_path();
+        std::fs::write(path, serde_json::to_vec(&metadata).unwrap())?;
+        Ok(())
+    }
+    fn load(&mut self) -> Result<(), Error> {
+        let path = self.get_metadata_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        let metadata: EvolutionMetadata = serde_json::from_slice(&std::fs::read(&path)?).unwrap();
+        self.ascension = metadata.ascension;
+        self.generation = metadata.generation;
+        //
+        let individuals: HashMap<String, Arc<Mutex<Individual>>> =
+            Individual::load_dir(&self.path)?
+                .into_iter()
+                .map(|individual| {
+                    (
+                        individual.name.to_string(),
+                        Arc::from(Mutex::from(individual)),
+                    )
+                })
+                .collect();
+        let lookup = |individual: &String| individuals.get(individual).unwrap().clone();
+        self.members = metadata.members.iter().map(lookup).collect();
+        self.waiting = metadata.waiting.iter().map(lookup).collect();
+        self.leaderboard = metadata.leaderboard.iter().map(lookup).collect();
+        self.hall_of_fame = metadata.hall_of_fame.iter().map(lookup).collect();
+        // Sort the historical data to enforce invariants.
+        self.leaderboard
+            .sort_by(compare_scores(self.score.as_ref()));
+        self.hall_of_fame
+            .sort_by_key(|x| x.lock().unwrap().ascension.unwrap_or(u64::MAX));
+        Ok(())
+    }
+}
+
+fn mktempdir() -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!("evo{:x}", rand::random_range(0..u64::MAX)));
+    path
+}
+
+/// Getter / setter methods
+impl Evolution {
+    /// Get the `path` argument or the assigned temporary directory
+    pub fn get_path(&self) -> &Path {
+        &self.path
+    }
+    fn get_metadata_path(&self) -> PathBuf {
+        self.path.join("population.json")
+    }
+    /// Get the `replacement` argument
+    pub fn get_replacement(&self) -> Replacement {
+        self.replacement
+    }
+    /// Get the `population_size` argument.
+    pub fn get_population_size(&self) -> usize {
+        self.population_size
+    }
+    /// Get the total number of individuals that have died.
+    pub fn get_ascension(&self) -> u64 {
+        self.ascension
+    }
+    /// Get the number of cohorts of `population_size` that have died.
+    pub fn get_generation(&self) -> u64 {
+        self.generation
+    }
+    /// Get the current members of the population.
+    ///
+    /// All modifications must be saved to file using `individual.save("")`
+    pub fn get_members(&self) -> &[Arc<Mutex<Individual>>] {
+        &self.members
+    }
+    /// Get the highest scoring individuals ever recorded. This is sorted
+    /// descending by score, so that `leaderboard[0]` is the best individual.
+    pub fn get_leaderboard(&self) -> &[Arc<Mutex<Individual>>] {
+        &self.leaderboard
+    }
+    /// Get the highest scoring individuals from each generation. This is sorted
+    /// by ascension, so that `hall_of_fame[0]` is the oldest.
+    pub fn get_hall_of_fame(&self) -> &[Arc<Mutex<Individual>>] {
+        &self.hall_of_fame
+    }
+}
+
+// impl npc_maker::evo::API for Evolution {
+impl Evolution {
+    /// Get a list of parents to be mated together to produce a child.
+    fn spawn(&mut self) -> Vec<Arc<Mutex<Individual>>> {
+        // Refill parents buffer.
+        if self.parents.is_empty() {
+            let num_pairs = if self.get_replacement() == Replacement::Generation {
+                self.get_population_size()
+            } else {
+                1
+            };
+            let members = self.get_members();
+            assert!(!members.is_empty(), "population is empty");
+            todo!();
+            // self.parents
+            //     .extend_from_slice(&(*self.selection)(members, num_pairs));
+        }
+        let mut parents = self.parents.pop().unwrap();
+        // Deduplicate the parents list.
+        parents.sort_unstable_by_key(Arc::as_ptr);
+        parents.dedup_by_key(|parent| Arc::as_ptr(parent));
+        parents
+    }
+    /// Add a new individual to this population.
+    fn death(&mut self, mut individual: Individual) -> Result<(), Error> {
+        debug_assert!(individual.ascension.is_none());
+        individual.ascension = Some(self.ascension);
+        self.ascension += 1;
+        //
+        individual.save(&self.path)?;
+        let individual = Arc::from(Mutex::from(individual));
+        // Make room in the current members list for another individual.
+        match self.replacement {
+            Replacement::Unbounded => {}
+            Replacement::Generation => {}
+            Replacement::Random => {
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let random_index = rand::random_range(0..self.members.len());
+                    let random_individual = self.members.swap_remove(random_index);
+                    Individual::drop(random_individual)?;
+                }
+            }
+            Replacement::Worst => {
+                let compare_scores = compare_scores(self.score.as_ref());
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let (worst_index, _worst_individual) = self
+                        .members
+                        .iter()
+                        .enumerate()
+                        .min_by(|a, b| compare_scores(a.1, b.1))
+                        .unwrap();
+                    let worst_individual = self.members.swap_remove(worst_index);
+                    Individual::drop(worst_individual)?;
+                }
+            }
+            Replacement::Oldest => {
+                while !self.members.is_empty() && self.members.len() >= self.population_size {
+                    let (oldest_index, _oldest_individual) = self
+                        .members
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
+                        .unwrap();
+                    let oldest_individual = self.members.swap_remove(oldest_index);
+                    Individual::drop(oldest_individual)?;
+                }
+            }
+        }
+        // Save the individual into the current generation.
+        match self.replacement {
+            Replacement::Unbounded
+            | Replacement::Random
+            | Replacement::Worst
+            | Replacement::Oldest => {
+                self.members.push(individual.clone());
+            }
+            Replacement::Generation => {}
+        }
+        // Stage the individual for the next generation and bookkeeping.
+        self.waiting.push(individual.clone());
+        if self.waiting.len() >= self.population_size {
+            self.rollover()?;
+        }
+        Ok(())
     }
 }
 
@@ -191,133 +416,11 @@ impl Evolution {
     /// Argument `hall_of_fame_size` is the number of individuals from each
     /// generation to induct in to the hall of fame. Set to zero to disable the
     /// hall of fame.
-    pub fn new(
-        path: impl AsRef<Path>,
-        replacement: Option<Replacement>,
-        selection: Option<Arc<Selection>>,
-        score: Option<Arc<Score>>,
-        population_size: usize,
-        leaderboard_size: usize,
-        hall_of_fame_size: usize,
-    ) -> Result<Evolution, Error> {
-        let mut path = path.as_ref().to_path_buf();
-        // Fill in empty path with temp dir.
-        if path.to_str() == Some("") {
-            path = std::env::temp_dir();
-            path.push(format!("pop{:x}", rand::random_range(0..u64::MAX)));
-        }
-        if !path.exists() {
-            std::fs::create_dir(&path)?;
-        }
-        //
-        let score = score.unwrap_or_else(|| Arc::new(default_score));
-        //
-        // let selection =
-        //     selection.unwrap_or_else(|| default_selection(population_size, score.clone()));
-        //
-        let mut this = Evolution {
-            path,
-            replacement: replacement.unwrap_or(Replacement::Generation),
-            selection: selection.unwrap(),
-            score,
-            population_size,
-            leaderboard_size,
-            hall_of_fame_size,
-            ascension: 0,
-            generation: 0,
-            members: Default::default(),
-            waiting: Default::default(),
-            leaderboard: Default::default(),
-            hall_of_fame: Default::default(),
-            parents: vec![],
-        };
-        this.load()?;
-        Ok(this)
-    }
-    fn save(&self) -> Result<(), Error> {
-        let get_name = |indiv: &Arc<Mutex<Individual>>| indiv.lock().unwrap().name.clone();
-        let metadata = EvolutionMetadata {
-            ascension: self.ascension,
-            generation: self.generation,
-            members: self.members.iter().map(get_name).collect(),
-            waiting: self.waiting.iter().map(get_name).collect(),
-            leaderboard: self.leaderboard.iter().map(get_name).collect(),
-            hall_of_fame: self.hall_of_fame.iter().map(get_name).collect(),
-        };
-        let path = self.get_metadata_path();
-        std::fs::write(path, serde_json::to_vec(&metadata).unwrap())?;
-        Ok(())
-    }
-    fn load(&mut self) -> Result<(), Error> {
-        let path = self.get_metadata_path();
-        if !path.exists() {
-            return Ok(());
-        }
-        let metadata: EvolutionMetadata = serde_json::from_slice(&std::fs::read(&path)?).unwrap();
-        self.ascension = metadata.ascension;
-        self.generation = metadata.generation;
-        //
-        let individuals: HashMap<String, Arc<Mutex<Individual>>> =
-            Individual::load_dir(&self.path)?
-                .into_iter()
-                .map(|individual| {
-                    (
-                        individual.name.to_string(),
-                        Arc::from(Mutex::from(individual)),
-                    )
-                })
-                .collect();
-        let lookup = |individual: &String| individuals.get(individual).unwrap().clone();
-        self.members = metadata.members.iter().map(lookup).collect();
-        self.waiting = metadata.waiting.iter().map(lookup).collect();
-        self.leaderboard = metadata.leaderboard.iter().map(lookup).collect();
-        self.hall_of_fame = metadata.hall_of_fame.iter().map(lookup).collect();
-        // Sort the historical data to enforce invariants.
-        self.leaderboard
-            .sort_by(compare_scores(self.score.as_ref()));
-        self.hall_of_fame
-            .sort_by_key(|x| x.lock().unwrap().ascension.unwrap_or(u64::MAX));
-        Ok(())
-    }
-    /// Get the `path` argument or a temporary directory.
-    pub fn get_path(&self) -> &Path {
-        &self.path
-    }
-    fn get_metadata_path(&self) -> PathBuf {
-        self.path.join("population.json")
-    }
-    /// Get the `replacement` argument.
-    pub fn get_replacement(&self) -> Replacement {
-        self.replacement
-    }
-    /// Get the `population_size` argument.
-    pub fn get_population_size(&self) -> usize {
-        self.population_size
-    }
-    /// Get the total number of individuals that have died.
-    pub fn get_ascension(&self) -> u64 {
-        self.ascension
-    }
-    /// Get the number of cohorts of `population_size` that have died.
-    pub fn get_generation(&self) -> u64 {
-        self.generation
-    }
-    /// Get the current members of the population.
-    ///
-    /// All modifications must be saved to file using `individual.save("")`
-    pub fn get_members(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.members
-    }
-    /// Get the highest scoring individuals ever recorded. This is sorted
-    /// descending by score, so that `leaderboard[0]` is the best individual.
-    pub fn get_leaderboard(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.leaderboard
-    }
-    /// Get the highest scoring individuals from each generation. This is sorted
-    /// by ascension, so that `hall_of_fame[0]` is the oldest.
-    pub fn get_hall_of_fame(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.hall_of_fame
-    }
+
+    //
+
+    //
+
     /// Force the next generation to replace the current generation, even if the
     /// next generation has not reached the `population_size`. This is useful for
     /// seeding a population with initial genetic material and then making
@@ -380,93 +483,6 @@ impl Evolution {
         // Discard the old generation.
         for individual in self.waiting.drain(..) {
             Individual::drop(individual)?;
-        }
-        Ok(())
-    }
-}
-
-// impl npc_maker::evo::API for Evolution {
-impl Evolution {
-    /// Get a list of parents to be mated together to produce a child.
-    fn spawn(&mut self) -> Vec<Arc<Mutex<Individual>>> {
-        // Refill parents buffer.
-        if self.parents.is_empty() {
-            let num_pairs = if self.get_replacement() == Replacement::Generation {
-                self.get_population_size()
-            } else {
-                1
-            };
-            let members = self.get_members();
-            assert!(!members.is_empty(), "population is empty");
-            todo!();
-            // self.parents
-            //     .extend_from_slice(&(*self.selection)(members, num_pairs));
-        }
-        let mut parents = self.parents.pop().unwrap();
-        // Deduplicate the parents list.
-        parents.sort_unstable_by_key(Arc::as_ptr);
-        parents.dedup_by_key(|parent| Arc::as_ptr(parent));
-        parents
-    }
-    /// Add a new individual to this population.
-    fn death(&mut self, mut individual: Individual) -> Result<(), Error> {
-        debug_assert!(individual.ascension.is_none());
-        individual.ascension = Some(self.ascension);
-        self.ascension += 1;
-        //
-        individual.save(&self.path)?;
-        let individual = Arc::from(Mutex::from(individual));
-        // Make room in the current members list for another individual.
-        match self.replacement {
-            Replacement::Unbounded => {}
-            Replacement::Generation => {}
-            Replacement::Random => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let random_index = rand::random_range(0..self.members.len());
-                    let random_individual = self.members.swap_remove(random_index);
-                    Individual::drop(random_individual)?;
-                }
-            }
-            Replacement::Worst => {
-                let compare_scores = compare_scores(self.score.as_ref());
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (worst_index, _worst_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by(|a, b| compare_scores(a.1, b.1))
-                        .unwrap();
-                    let worst_individual = self.members.swap_remove(worst_index);
-                    Individual::drop(worst_individual)?;
-                }
-            }
-            Replacement::Oldest => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (oldest_index, _oldest_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
-                        .unwrap();
-                    let oldest_individual = self.members.swap_remove(oldest_index);
-                    Individual::drop(oldest_individual)?;
-                }
-            }
-        }
-        // Save the individual into the current generation.
-        match self.replacement {
-            Replacement::Unbounded
-            | Replacement::Random
-            | Replacement::Worst
-            | Replacement::Oldest => {
-                self.members.push(individual.clone());
-            }
-            Replacement::Generation => {}
-        }
-        // Stage the individual for the next generation and bookkeeping.
-        self.waiting.push(individual.clone());
-        if self.waiting.len() >= self.population_size {
-            self.rollover()?;
         }
         Ok(())
     }
@@ -616,12 +632,4 @@ mod tests {
                 > -100.0
         );
     }
-}
-
-
-fn main() {
-    let mut args = Cli::parse();
-    dbg!(args);
-    // let mut evo = Evolution::new().unwrap();
-    // evo.main().unwrap();
 }
