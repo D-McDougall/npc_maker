@@ -1,4 +1,4 @@
-# Individuals #
+# The Individual Interface #
 
 An "**individual**" is a distinct life-form with its own genome.
 Evolutionary algorithms operate on individuals, while genetic algorithms
