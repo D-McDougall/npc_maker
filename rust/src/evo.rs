@@ -1,8 +1,8 @@
 //! Evolution interface, for building and using evolutionary algorithms
 
-use crate::indiv::Individual;
 use process_anywhere::{Computer, Process};
-use std::io::{self, BufRead, Write};
+use serde::Serialize;
+use std::io::{self, BufRead, StdinLock, StdoutLock, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -33,13 +33,13 @@ pub trait API {
     /// | 1         | Asexually reproduce the parent   |
     /// | 2         | Sexually reproduce the parents   |
     /// | 3+        | Unspecified                      |
-    fn spawn(&mut self) -> Vec<&Individual>;
+    fn spawn(&mut self) -> Vec<PathBuf>;
 
     /// Notify the evolutionary algorithm that the given individual died
-    fn death(&mut self, individual: Individual);
+    fn death(&mut self, individual: PathBuf);
 
     /// Receive a non-standard command
-    fn custom(&mut self, command: String, arguments: Vec<serde_json::Value>) {
+    fn custom(&mut self, command: String, arguments: Vec<serde_json::Value>) -> serde_json::Value {
         panic!("unsupported operation: {command}")
     }
 
@@ -52,38 +52,46 @@ pub trait API {
     ///
     /// This never returns!
     fn main(&mut self) -> Result<(), Error> {
+        // Lock the standard IO channels
         let stdin = io::stdin();
-        let mut handle = stdin.lock();
-        let mut message = String::new();
-        let retval: Result<(), Error> = 'mainloop: loop {
-            // Wait for the next message from the environment.
-            if let Err(err) = handle.read_line(&mut message) {
-                break 'mainloop Err(err.into());
-            }
-            let mut json: Vec<serde_json::Value> = match serde_json::from_str(&message) {
-                Ok(json) => json,
-                Err(err) => break 'mainloop Err(err.into()),
-            };
+        let stdout = io::stdout();
+        let mut stdin_handle = stdin.lock();
+        let mut stdout_handle = stdout.lock();
+        /// Helper function for reading input messages from the environment
+        fn read_json(stdin_handle: &mut StdinLock) -> Result<(String, Vec<serde_json::Value>), Error> {
+            let mut message = String::new();
+            stdin_handle.read_line(&mut message)?;
+            let mut json: Vec<serde_json::Value> = serde_json::from_str(&message)?;
             assert!(!json.is_empty());
             let command = json.remove(0);
             let arguments = json;
             let Some(command) = command.as_str() else {
                 panic!();
             };
-            match command {
+            Ok((command.to_string(), arguments))
+        }
+        /// Helper function for outputting single-line JSON messages
+        fn print_json<T: Serialize>(stdout_handle: &mut StdoutLock, message: &T) -> Result<(), Error> {
+            let mut json = serde_json::to_string(message)?;
+            json.push('\n');
+            stdout_handle.write_all(json.as_bytes())?;
+            stdout_handle.flush()?;
+            Ok(())
+        }
+        // Command-response loop
+        let retval: Result<(), Error> = loop {
+            let (command, arguments) = match read_json(&mut stdin_handle) {
+                Ok(pair) => pair,
+                Err(err) => break Err(err),
+            };
+            match command.as_str() {
                 "spawn" => {
-                    let mut parents = self.spawn();
-                    let mut response = vec![];
-                    for indiv in parents.iter_mut() {
-                        let path = indiv.path.as_ref().unwrap();
-                        response.push(format!("{}", path.display()));
-                    }
-                    let response = match serde_json::to_string(&response) {
-                        Ok(response) => response,
-                        Err(err) => break 'mainloop Err(err.into()),
-                    };
-                    if let Err(err) = io::stdout().write_all(response.as_bytes()) {
-                        break 'mainloop Err(err.into());
+                    let parents = self.spawn();
+                    // Convert PathBuf to String
+                    let response: Vec<String> = parents.iter().map(|path| format!("{}", path.display())).collect();
+                    // Transmit message
+                    if let Err(err) = print_json(&mut stdout_handle, &response) {
+                        break Err(err);
                     }
                 }
                 "death" => {
@@ -92,15 +100,16 @@ pub trait API {
                         let Some(path) = path.as_str() else {
                             panic!();
                         };
-                        let indiv = match Individual::load(path) {
-                            Ok(indiv) => indiv,
-                            Err(err) => break 'mainloop Err(err.into()),
-                        };
-                        self.death(indiv);
+                        self.death(path.into());
                     }
                 }
-                _ => self.custom(command.to_string(), arguments),
-            };
+                _ => {
+                    let response = self.custom(command, arguments);
+                    if let Err(err) = print_json(&mut stdout_handle, &response) {
+                        break Err(err);
+                    }
+                }
+            }
         };
         self.quit();
         retval
@@ -125,8 +134,8 @@ impl Evolution {
     /// Request a set of parents to mate together
     pub fn spawn(&mut self) -> Result<Vec<PathBuf>, Error> {
         self.process.send_line(r#"["spawn"]"#)?;
-        let result = self.process.block_line()?;
-        let parents = serde_json::from_str(&result)?;
+        let response = self.process.block_line()?;
+        let parents = serde_json::from_str(&response)?;
         Ok(parents)
     }
 
@@ -141,6 +150,15 @@ impl Evolution {
 
     /// Send a non-standard command
     pub fn custom(&mut self, command: &str, args: &[serde_json::Value]) -> Result<serde_json::Value, Error> {
-        todo!()
+        let command = serde_json::to_value(command)?;
+        // Assemble the message command & arguments
+        let mut message = Vec::with_capacity(args.len() + 1);
+        message.push(command);
+        message.extend_from_slice(args);
+        let json = serde_json::to_string(&message)?;
+        self.process.send_line(&json)?;
+        let response = self.process.block_line()?;
+        let value = serde_json::from_str(&response)?;
+        Ok(value)
     }
 }
