@@ -10,16 +10,19 @@
 //! * Hall of Fame
 
 use mate_selection::MateSelection;
+use npc_maker::evo::{API, Error};
 use npc_maker::indiv::Individual;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, BufWriter, Error, Read, Write};
+use std::ffi::OsStr;
+use std::fs;
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    let evo = Evolution::new(std::env::args().collect()).unwrap();
-    // evo.main().unwrap();
+    let mut evo = Evolution::new(std::env::args().collect()).unwrap();
+    evo.main().unwrap();
 }
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -35,11 +38,11 @@ Example Evolutionary Algorithms for the NPC Maker
 pub struct Evolution {
     path: PathBuf,
 
-    replacement: Replacement,
+    score: String,
 
     selection: String,
 
-    score: String,
+    replacement: Replacement,
 
     population_size: usize,
 
@@ -51,46 +54,115 @@ pub struct Evolution {
 
     generation: u64,
 
-    members: Vec<Arc<Mutex<Individual>>>,
+    members: Vec<Individual>,
 
-    waiting: Vec<Arc<Mutex<Individual>>>,
+    waiting: Vec<Individual>,
 
-    leaderboard: Vec<Arc<Mutex<Individual>>>,
+    leaderboard: Vec<(f64, u64, PathBuf)>,
 
-    hall_of_fame: Vec<Arc<Mutex<Individual>>>,
-
-    parents: Vec<Vec<Arc<Mutex<Individual>>>>,
+    parents: Vec<Vec<PathBuf>>,
 
     verbose: bool,
+}
+
+/// Persistent storage for parameters and program state
+#[derive(Serialize, Deserialize)]
+struct Metadata {
+    replacement: Replacement,
+    selection: String,
+    score: String,
+    population_size: usize,
+    leaderboard_size: usize,
+    hall_of_fame_size: usize,
+    ascension: u64,
+    generation: u64,
 }
 
 /// Controls how the population replaces individuals
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Replacement {
-    /*
-    /// Do not add or remove members.
+    /// Do not add or remove members
     Frozen,
-    */
-    /// Do not replace members. The population grows without bounds.
+
+    /// Do not replace members, the population grows without bounds
     Unbounded,
 
-    /// Replace members at random.
+    /// Replace members at random
     Random,
 
-    /// Replace the oldest member.
+    /// Replace the oldest member
     Oldest,
 
-    /// Replace the lowest scoring member.
+    /// Replace the lowest scoring member
     Worst,
 
     // TODO: Rename generation to cohort?
-    /// Replace generations entirely and all at once.
+    /// Replace generations entirely and all at once
     Generation,
+}
+
+/// Getter / setter methods
+impl Evolution {
+    /// Get the `path` argument or the assigned temporary directory
+    pub fn get_path(&self) -> &Path {
+        &self.path
+    }
+    /// Persistent storage for program parameters & state
+    fn get_metadata_path(&self) -> PathBuf {
+        self.path.join("evo.json")
+    }
+    /// Directory of the currently mating population
+    pub fn get_population_path(&self) -> PathBuf {
+        self.path.join("pop")
+    }
+    fn get_waiting_path(&self) -> PathBuf {
+        self.path.join("next")
+    }
+    /// Directory of the highest scoring individuals ever recorded
+    pub fn get_leaderboard_path(&self) -> PathBuf {
+        self.path.join("leaderboard")
+    }
+    /// Directory of the highest scoring individuals from each generation
+    pub fn get_hall_of_fame_path(&self) -> PathBuf {
+        self.path.join("hall_of_fame")
+    }
+    /// Get the `score` argument
+    pub fn get_score(&self) -> String {
+        self.score.clone()
+    }
+    /// Get the `selection` argument
+    pub fn get_selection(&self) -> String {
+        self.selection.clone()
+    }
+    /// Get the `replacement` argument
+    pub fn get_replacement(&self) -> Replacement {
+        self.replacement
+    }
+    /// Get the `population` argument
+    pub fn get_population_size(&self) -> usize {
+        self.population_size
+    }
+    /// Get the `leaderboard` argument
+    pub fn get_leaderboard_size(&self) -> usize {
+        self.leaderboard_size
+    }
+    /// Get the `hall_of_fame` argument
+    pub fn get_hall_of_fame_size(&self) -> usize {
+        self.hall_of_fame_size
+    }
+    /// Get the total number of individuals that have died
+    pub fn get_ascension(&self) -> u64 {
+        self.ascension
+    }
+    /// Get the number of cohorts of size `population` that have died
+    pub fn get_generation(&self) -> u64 {
+        self.generation
+    }
 }
 
 /// Methods to initialize, save, and load
 impl Evolution {
-    /// Main entrypoint to initialize program state
+    /// Main entry point to initialize program state
     ///
     /// This accepts the program's CLI arguments
     pub fn new(mut args: Vec<String>) -> Result<Self, Error> {
@@ -118,7 +190,7 @@ impl Evolution {
                 this.load(path)?;
             }
         } else {
-            let path = mktempdir();
+            let path = Self::mktempdir();
             this.init(path)?;
         }
         // Apply the remaining CLI arguments
@@ -142,10 +214,15 @@ impl Evolution {
             members: vec![],
             waiting: vec![],
             leaderboard: vec![],
-            hall_of_fame: vec![],
             parents: vec![],
             verbose: false,
         }
+    }
+    /// File-path for temporary directory with unique name, does not create directory
+    fn mktempdir() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("evo{:x}", rand::random_range(0..u64::MAX)));
+        path
     }
     /// Parse the command line arguments
     fn parse_flags(&mut self, mut args: Vec<String>) -> bool {
@@ -158,24 +235,24 @@ impl Evolution {
                     update = value != self.population_size;
                     self.population_size = value;
                 }
-                "--replacement" => {
-                    todo!();
-                    update = true;
-                }
-                "--selection" => {
-                    todo!();
-                    update = true;
-                }
                 "--score" => {
                     todo!();
                     update = true;
                 }
-                "--leaderboard" => {
+                "-s" | "--selection" => {
+                    todo!();
+                    update = true;
+                }
+                "-r" | "--replacement" => {
+                    todo!();
+                    update = true;
+                }
+                "-l" | "--leaderboard" => {
                     let value: usize = args.remove(0).parse().unwrap();
                     update = value != self.leaderboard_size;
                     self.leaderboard_size = value;
                 }
-                "--hall_of_fame" => {
+                "-f" | "--hall_of_fame" => {
                     let value: usize = args.remove(0).parse().unwrap();
                     update = value != self.hall_of_fame_size;
                     self.hall_of_fame_size = value;
@@ -198,132 +275,92 @@ impl Evolution {
     }
     /// Initialize file & directory structures
     fn init(&mut self, path: PathBuf) -> Result<(), Error> {
-        std::fs::create_dir(&path)?;
+        fs::create_dir(&path)?;
+        fs::create_dir(self.get_population_path())?;
+        fs::create_dir(self.get_waiting_path())?;
+        fs::create_dir(self.get_leaderboard_path())?;
+        fs::create_dir(self.get_hall_of_fame_path())?;
         Ok(())
     }
     fn save(&self) -> Result<(), Error> {
-        // let get_name = |indiv: &Arc<Mutex<Individual>>| indiv.lock().unwrap().name.clone();
-        // let metadata = EvolutionMetadata {
-        //     ascension: self.ascension,
-        //     generation: self.generation,
-        //     members: self.members.iter().map(get_name).collect(),
-        //     waiting: self.waiting.iter().map(get_name).collect(),
-        //     leaderboard: self.leaderboard.iter().map(get_name).collect(),
-        //     hall_of_fame: self.hall_of_fame.iter().map(get_name).collect(),
-        // };
-        // let path = self.get_metadata_path();
-        // std::fs::write(path, serde_json::to_vec(&metadata).unwrap())?;
+        let metadata = Metadata {
+            replacement: self.get_replacement(),
+            selection: self.get_selection(),
+            score: self.get_score(),
+            population_size: self.get_population_size(),
+            leaderboard_size: self.get_leaderboard_size(),
+            hall_of_fame_size: self.get_hall_of_fame_size(),
+            ascension: self.get_ascension(),
+            generation: self.get_generation(),
+        };
+        let metadata = serde_json::to_vec(&metadata)?;
+        let path = self.get_metadata_path();
+        // Write to temporary file and rename for atomic file update
+        let mut tmp = path.clone();
+        tmp.add_extension("tmp");
+        fs::write(&tmp, &metadata)?;
+        fs::rename(&tmp, &path)?;
         Ok(())
     }
     fn load(&mut self, path: PathBuf) -> Result<(), Error> {
-        // let path = self.get_metadata_path();
-        // if !path.exists() {
-        //     return Ok(());
-        // }
-        // let metadata: EvolutionMetadata = serde_json::from_slice(&std::fs::read(&path)?).unwrap();
-        // self.ascension = metadata.ascension;
-        // self.generation = metadata.generation;
+        let path = self.get_metadata_path();
+        let json = fs::read(&path)?;
+        let mut metadata: Metadata = serde_json::from_slice(&json).unwrap();
+        self.replacement = metadata.replacement;
+        self.selection = std::mem::take(&mut metadata.selection);
+        self.score = std::mem::take(&mut metadata.score);
+        self.population_size = metadata.population_size;
+        self.leaderboard_size = metadata.leaderboard_size;
+        self.hall_of_fame_size = metadata.hall_of_fame_size;
+        self.ascension = metadata.ascension;
+        self.generation = metadata.generation;
+        fn scan_for_indiv(path: PathBuf) -> Result<Vec<PathBuf>, Error> {
+            let mut files = vec![];
+            for entry in fs::read_dir(path)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension() == Some(OsStr::new("indiv")) {
+                    files.push(path);
+                }
+            }
+            Ok(files)
+        }
+        todo!();
+        // self.members = scan_for_indiv(self.get_population_path())?;
+        // self.waiting = scan_for_indiv(self.get_waiting_path())?;
         // //
-        // let individuals: HashMap<String, Arc<Mutex<Individual>>> =
-        //     Individual::load_dir(&self.path)?
-        //         .into_iter()
-        //         .map(|individual| {
-        //             (
-        //                 individual.name.to_string(),
-        //                 Arc::from(Mutex::from(individual)),
-        //             )
-        //         })
-        //         .collect();
-        // let lookup = |individual: &String| individuals.get(individual).unwrap().clone();
-        // self.members = metadata.members.iter().map(lookup).collect();
-        // self.waiting = metadata.waiting.iter().map(lookup).collect();
-        // self.leaderboard = metadata.leaderboard.iter().map(lookup).collect();
-        // self.hall_of_fame = metadata.hall_of_fame.iter().map(lookup).collect();
-        // // Sort the historical data to enforce invariants.
-        // self.leaderboard
-        //     .sort_by(compare_scores(self.score.as_ref()));
-        // self.hall_of_fame
-        //     .sort_by_key(|x| x.lock().unwrap().ascension.unwrap_or(u64::MAX));
+        // let leaderboard = scan_for_indiv(self.get_leaderboard_path())?;
+        // self.leaderboard.sort_unstable_by(todo!());
         Ok(())
     }
 }
 
-fn mktempdir() -> PathBuf {
-    let mut path = std::env::temp_dir();
-    path.push(format!("evo{:x}", rand::random_range(0..u64::MAX)));
-    path
-}
-
-/// Getter / setter methods
-impl Evolution {
-    /// Get the `path` argument or the assigned temporary directory
-    pub fn get_path(&self) -> &Path {
-        &self.path
-    }
-    fn get_metadata_path(&self) -> PathBuf {
-        self.path.join("population.json")
-    }
-    /// Get the `replacement` argument
-    pub fn get_replacement(&self) -> Replacement {
-        self.replacement
-    }
-    /// Get the `population_size` argument.
-    pub fn get_population_size(&self) -> usize {
-        self.population_size
-    }
-    /// Get the total number of individuals that have died.
-    pub fn get_ascension(&self) -> u64 {
-        self.ascension
-    }
-    /// Get the number of cohorts of `population_size` that have died.
-    pub fn get_generation(&self) -> u64 {
-        self.generation
-    }
-    /// Get the current members of the population.
-    ///
-    /// All modifications must be saved to file using `individual.save("")`
-    pub fn get_members(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.members
-    }
-    /// Get the highest scoring individuals ever recorded. This is sorted
-    /// descending by score, so that `leaderboard[0]` is the best individual.
-    pub fn get_leaderboard(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.leaderboard
-    }
-    /// Get the highest scoring individuals from each generation. This is sorted
-    /// by ascension, so that `hall_of_fame[0]` is the oldest.
-    pub fn get_hall_of_fame(&self) -> &[Arc<Mutex<Individual>>] {
-        &self.hall_of_fame
-    }
-}
-
-/*
-
-// impl npc_maker::evo::API for Evolution {
-impl Evolution {
+impl API for Evolution {
     /// Get a list of parents to be mated together to produce a child.
-    fn spawn(&mut self) -> Vec<Arc<Mutex<Individual>>> {
-        // Refill parents buffer.
-        if self.parents.is_empty() {
-            let num_pairs = if self.get_replacement() == Replacement::Generation {
-                self.get_population_size()
-            } else {
-                1
-            };
-            let members = self.get_members();
-            assert!(!members.is_empty(), "population is empty");
-            todo!();
-            // self.parents
-            //     .extend_from_slice(&(*self.selection)(members, num_pairs));
-        }
-        let mut parents = self.parents.pop().unwrap();
-        // Deduplicate the parents list.
-        parents.sort_unstable_by_key(Arc::as_ptr);
-        parents.dedup_by_key(|parent| Arc::as_ptr(parent));
-        parents
+    fn spawn(&mut self) -> Vec<PathBuf> {
+        // // Refill parents buffer.
+        // if self.parents.is_empty() {
+        //     let num_pairs = if self.get_replacement() == Replacement::Generation {
+        //         self.get_population_size()
+        //     } else {
+        //         1
+        //     };
+        //     let members = self.get_members();
+        //     assert!(!members.is_empty(), "population is empty");
+        //     todo!();
+        //     // self.parents
+        //     //     .extend_from_slice(&(*self.selection)(members, num_pairs));
+        // }
+        // let mut parents = self.parents.pop().unwrap();
+        // // Deduplicate the parents list.
+        // parents.sort_unstable_by_key(Arc::as_ptr);
+        // parents.dedup_by_key(|parent| Arc::as_ptr(parent));
+        // parents
+        todo!()
     }
     /// Add a new individual to this population.
-    fn death(&mut self, mut individual: Individual) -> Result<(), Error> {
+    fn death(&mut self, mut individual: PathBuf) {
+        /*
         debug_assert!(individual.ascension.is_none());
         individual.ascension = Some(self.ascension);
         self.ascension += 1;
@@ -382,9 +419,24 @@ impl Evolution {
         if self.waiting.len() >= self.population_size {
             self.rollover()?;
         }
-        Ok(())
+        */
     }
+    /// Receive a non-standard command
+    fn custom(&mut self, command: String, arguments: Vec<serde_json::Value>) -> serde_json::Value {
+        match command.as_str() {
+            "rollover" => {
+                todo!();
+            }
+            _ => {
+                panic!("unsupported operation: {command}");
+            }
+        }
+        Default::default()
+    }
+    fn quit(&mut self) {}
 }
+
+/*
 
 /// Evolutionary algorithms choose which parent to reproduce with this
 /// user-supplied function.

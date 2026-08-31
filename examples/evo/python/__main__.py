@@ -4,7 +4,6 @@ Evolutionary algorithms and supporting tools.
 
 # TODO: Reckon API differences between python and rust.
 #   * Population: subclasses vs type enumeration.
-#   * Population: python and rust use different file structures, rust version is better.
 #   * Evolution: folded into Population class, rename Population to Evolution.
 
 from npc_maker.indiv import Individual

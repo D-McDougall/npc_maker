@@ -2,10 +2,9 @@
 	name = "evo"
 	version = "0.1.0"
 	edition = "2024"
-	description = "Evolutionary algorithms for the NPC Maker"
+	description = "Example evolutionary algorithms for the NPC Maker"
 
 [dependencies]
-	clap = { version = "4.6.0", features = ["derive"] }
 	mate_selection = "0.1.2"
 	npc_maker = {path = "../../../rust/"}
 	rand = "0.10.2"
