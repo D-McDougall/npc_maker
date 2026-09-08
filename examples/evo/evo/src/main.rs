@@ -25,20 +25,44 @@ fn main() {
     evo.main().unwrap();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub const USAGE: &'static str = r#"evo PATH [--flag VALUE]"#;
 
 pub const HELP: &'static str = r#"
 Example Evolutionary Algorithms for the NPC Maker
+
+
+
+
+Argument `path` is a directory where this will save the population to.
+If path is an empty string, a temporary directory will be created.
+
+Argument `replacement` controls how new members are added once the size of
+the population reaches the population_size argument.
+
+Argument `selection` controls which individuals are allowed to mate and
+with whom.
+
+Argument `score` is an optional custom scoring function.
+
+Argument `population_size` controls the total size of the mating
+population.
+
+Argument `leaderboard_size` is the number of the best scoring individuals
+to save in perpetuity. Set to zero to disable the leaderboard.
+
+Argument `hall_of_fame_size` is the number of individuals from each
+generation to induct in to the hall of fame. Set to zero to disable the
+hall of fame.
 "#;
 
 /// Main program data structure
 #[derive(Debug)]
 pub struct Evolution {
     path: PathBuf,
-
-    score: String,
 
     selection: Vec<String>,
 
@@ -94,7 +118,6 @@ pub enum Replacement {
 /// Persistent storage for parameters and program state
 #[derive(Serialize, Deserialize)]
 struct Metadata {
-    score: String,
     selection: Vec<String>,
     replacement: Replacement,
     population_size: usize,
@@ -103,6 +126,8 @@ struct Metadata {
     ascension: u64,
     generation: u64,
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 /// Getter / setter methods
 impl Evolution {
@@ -128,10 +153,6 @@ impl Evolution {
     /// Directory of the highest scoring individuals from each generation
     pub fn get_hall_of_fame_path(&self) -> PathBuf {
         self.path.join("hall_of_fame")
-    }
-    /// Get the `score` argument
-    pub fn get_score(&self) -> String {
-        self.score.clone()
     }
     /// Get the `selection` argument
     pub fn get_selection(&self) -> Vec<String> {
@@ -162,6 +183,8 @@ impl Evolution {
         self.generation
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 /// Methods to initialize, save, and load
 impl Evolution {
@@ -196,7 +219,6 @@ impl Evolution {
             replacement: Replacement::Generation,
             selection: vec!["exponential".to_string(), "10".to_string()],
             selection_fn: Box::new(mate_selection::RankedExponential(10)),
-            score: "score".to_string(),
             population_size: 100,
             leaderboard_size: 10,
             hall_of_fame_size: 0,
@@ -241,10 +263,6 @@ impl Evolution {
                     let value: usize = args.remove(0).parse().unwrap();
                     update = value != self.population_size;
                     self.population_size = value;
-                }
-                "--score" => {
-                    todo!();
-                    update = true;
                 }
                 "-s" | "--selection" => {
                     let (selection, selection_fn) = Self::parse_selection(args);
@@ -325,7 +343,6 @@ impl Evolution {
     /// Write metadata file
     fn save(&self) -> Result<(), Error> {
         let metadata = Metadata {
-            score: self.get_score(),
             selection: self.get_selection(),
             replacement: self.get_replacement(),
             population_size: self.get_population_size(),
@@ -350,7 +367,6 @@ impl Evolution {
         self.replacement = metadata.replacement;
         (self.selection, self.selection_fn) =
             Self::parse_selection(&mut std::mem::take(&mut metadata.selection));
-        self.score = std::mem::take(&mut metadata.score);
         self.population_size = metadata.population_size;
         self.leaderboard_size = metadata.leaderboard_size;
         self.hall_of_fame_size = metadata.hall_of_fame_size;
@@ -359,7 +375,7 @@ impl Evolution {
         self.population = Individual::load_dir(self.get_population_path())?;
         self.waiting = Individual::load_dir(self.get_waiting_path())?;
         self.leaderboard = Individual::load_dir(self.get_leaderboard_path())?;
-        // self.leaderboard.sort_unstable_by();
+        self.leaderboard.sort_unstable_by(compare_scores);
         // todo!();
         Ok(())
     }
@@ -380,6 +396,27 @@ impl Replacement {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+// Utility functions dealing with scores
+fn score_fn(individual: &Individual) -> f64 {
+    let Some(score) = individual.score.as_ref() else {
+        return f64::NEG_INFINITY;
+    };
+    score.parse().unwrap_or(f64::NEG_INFINITY)
+}
+fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
+    let a_score = score_fn(a);
+    let b_score = score_fn(b);
+    a_score.total_cmp(&b_score).reverse().then_with(|| {
+        a.ascension
+            .unwrap_or(u64::MAX)
+            .cmp(&b.ascension.unwrap_or(u64::MAX))
+    })
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 impl API for Evolution {
     /// Get a list of parents to be mated together to produce a child.
     fn spawn(&mut self) -> Vec<PathBuf> {
@@ -393,11 +430,7 @@ impl API for Evolution {
                 Replacement::Generation | Replacement::Frozen => self.population_size,
                 _ => 1,
             };
-            let scores: Vec<f64> = self
-                .population
-                .iter()
-                .map(|individual| self.score_fn(individual))
-                .collect();
+            let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
             let mut index = self.selection_fn.pairs(rng, buffer_size, scores);
             // Deduplicate all of the parents pairs.
             // for pair in index.iter_mut() {
@@ -417,72 +450,75 @@ impl API for Evolution {
     }
     /// Add a new individual to this population.
     fn death(&mut self, mut individual: PathBuf) {
-        /*
-        debug_assert!(individual.ascension.is_none());
+        // Bookkeeping on the Individual
+        let mut individual = Individual::load(individual).unwrap();
+        assert!(individual.ascension.is_none());
         individual.ascension = Some(self.ascension);
         self.ascension += 1;
-        //
-        individual.save(&self.path)?;
-        let individual = Arc::from(Mutex::from(individual));
-        // Make room in the current members list for another individual.
+        // Steady-state replacement: put individual directly into the population
         match self.replacement {
-            Replacement::Unbounded => {}
-            Replacement::Generation => {}
+            Replacement::Frozen => {
+                // Do nothing, by definition
+            }
+            Replacement::Growth => {
+                // Add the individual to the population
+                individual.save(self.get_population_path()).unwrap();
+                self.population.push(individual.clone());
+            }
+            Replacement::Generation => {
+                // Action defered until next rollover event
+            }
             Replacement::Random => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let random_index = rand::random_range(0..self.members.len());
-                    let random_individual = self.members.swap_remove(random_index);
-                    Individual::drop(random_individual)?;
-                }
+                // while !self.population.is_empty() && self.population.len() >= self.population_size {
+                //     let index = rand::random_range(0..self.population.len());
+                //     let random_individual = self.population.swap_remove(index);
+                //     Individual::drop(random_individual)?;
+                // }
+                individual.save(self.get_population_path()).unwrap();
+                self.population.push(individual.clone());
             }
             Replacement::Worst => {
-                let compare_scores = compare_scores(self.score.as_ref());
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (worst_index, _worst_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by(|a, b| compare_scores(a.1, b.1))
-                        .unwrap();
-                    let worst_individual = self.members.swap_remove(worst_index);
-                    Individual::drop(worst_individual)?;
-                }
+                // let compare_scores = compare_scores(self.score.as_ref());
+                // while !self.population.is_empty() && self.population.len() >= self.population_size {
+                //     let (worst_index, _worst_individual) = self
+                //         .population
+                //         .iter()
+                //         .enumerate()
+                //         .min_by(|a, b| compare_scores(a.1, b.1))
+                //         .unwrap();
+                //     let worst_individual = self.population.swap_remove(worst_index);
+                //     Individual::drop(worst_individual)?;
+                // }
+                individual.save(self.get_population_path()).unwrap();
+                self.population.push(individual.clone());
             }
             Replacement::Oldest => {
-                while !self.members.is_empty() && self.members.len() >= self.population_size {
-                    let (oldest_index, _oldest_individual) = self
-                        .members
-                        .iter()
-                        .enumerate()
-                        .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
-                        .unwrap();
-                    let oldest_individual = self.members.swap_remove(oldest_index);
-                    Individual::drop(oldest_individual)?;
-                }
+                // while !self.population.is_empty() && self.population.len() >= self.population_size {
+                //     let (oldest_index, _oldest_individual) = self
+                //         .population
+                //         .iter()
+                //         .enumerate()
+                //         .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
+                //         .unwrap();
+                //     let oldest_individual = self.population.swap_remove(oldest_index);
+                //     Individual::drop(oldest_individual)?;
+                // }
+                individual.save(self.get_population_path()).unwrap();
+                self.population.push(individual.clone());
             }
         }
-        // Save the individual into the current generation.
-        match self.replacement {
-            Replacement::Unbounded
-            | Replacement::Random
-            | Replacement::Worst
-            | Replacement::Oldest => {
-                self.members.push(individual.clone());
-            }
-            Replacement::Generation => {}
-        }
-        // Stage the individual for the next generation and bookkeeping.
-        self.waiting.push(individual.clone());
+        // Always save to waiting directory, even if not Replacement::Generation, for bookkeeping
+        individual.save(&self.get_waiting_path()).unwrap();
+        self.waiting.push(individual);
         if self.waiting.len() >= self.population_size {
-            self.rollover()?;
+            self.rollover().unwrap();
         }
-        */
     }
     /// Receive a non-standard command
     fn custom(&mut self, command: String, arguments: Vec<serde_json::Value>) -> serde_json::Value {
         match command.as_str() {
             "rollover" => {
-                todo!();
+                self.rollover().unwrap();
             }
             _ => {
                 panic!("unsupported operation: {command}");
@@ -491,9 +527,99 @@ impl API for Evolution {
         Default::default()
     }
 }
+
+/// Rollover Events
+///
+/// Generational rollover events happen every time population_size many
+/// individuals die. On rollover:
+///   * Replacement::Generation swaps in the new population
+///   * Update Leaderboard
+///   * Update Hall of Fame
+///   * Waiting list is cleared
 impl Evolution {
-    fn score_fn(&self, individual: &Individual) -> f64 {
-        individual.score.as_ref().unwrap().parse().unwrap()
+    /// Force the next generation to replace the current generation, even if the
+    /// next generation has not reached the `population_size`. This is useful for
+    /// seeding a population with initial genetic material and then making
+    /// the seed material immediately available by calling this method.
+    pub fn rollover(&mut self) -> Result<(), Error> {
+        if !self.waiting.is_empty() {
+            self.rollover_leaderboard()?;
+            self.rollover_hall_of_fame()?;
+            self.rollover_generation()?;
+        }
+        self.save()?;
+        Ok(())
+    }
+    fn rollover_leaderboard(&mut self) -> Result<(), Error> {
+        if self.leaderboard_size == 0 {
+            return Ok(());
+        }
+        /*
+        let min_score = if self.leaderboard.len() >= self.leaderboard_size {
+            let individual = self.leaderboard.last().unwrap();
+            (*self.score)(&individual.lock().unwrap())
+        } else {
+            f64::NEG_INFINITY
+        };
+        // Sort together the existing leaderboard and the new contenders.
+        self.leaderboard.extend(
+            self.waiting
+                .iter()
+                .filter(|individual| (*self.score)(&individual.lock().unwrap()) > min_score)
+                .cloned(),
+        );
+        // Use stable sort to preserve ascension ordering.
+        self.leaderboard
+            .sort_by(compare_scores(self.score.as_ref()));
+        // Remove low performing individuals from the leaderboard directory.
+        if self.leaderboard.len() > self.leaderboard_size {
+            for individual in self.leaderboard.drain(self.leaderboard_size..) {
+                Individual::drop(individual)?;
+            }
+        }
+        */
+        Ok(())
+    }
+    fn rollover_hall_of_fame(&mut self) -> Result<(), Error> {
+        if self.hall_of_fame_size == 0 {
+            return Ok(());
+        }
+        // Find the highest scoring individuals in the new generation.
+        let n = self.hall_of_fame_size.min(self.waiting.len() - 1);
+        self.waiting.select_nth_unstable_by(n, compare_scores);
+        let winners = &self.waiting[..n];
+        // Copy the winners into the hall of fame directory
+        let hall_of_fame_path = self.get_hall_of_fame_path();
+        for individual in winners.iter() {
+            let new_path = hall_of_fame_path.join(individual.file_name());
+            std::fs::copy(individual.path.as_ref().unwrap(), new_path)?;
+        }
+        Ok(())
+    }
+    fn rollover_generation(&mut self) -> Result<(), Error> {
+        self.generation += 1;
+        if matches!(self.replacement, Replacement::Generation) {
+            // Discard the current generation
+            for individual in self.waiting.drain(..) {
+                Individual::delete(individual)?;
+            }
+            // Move the waiting list files into the population directory
+            let population_path = self.get_population_path();
+            for individual in &mut self.waiting {
+                let old_path = individual.path.as_ref().unwrap();
+                let new_path = population_path.join(individual.file_name());
+                std::fs::rename(&old_path, &new_path)?;
+                individual.path = Some(new_path); // Update the Individual's bookkeeping
+            }
+            // Move the waiting list into the population
+            self.population = std::mem::take(&mut self.waiting);
+        } else {
+            // Clear the waiting list
+            for individual in self.waiting.drain(..) {
+                Individual::delete(individual)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -517,132 +643,6 @@ impl Evolution {
 /// | 2 | Sexually reproduce the parents |
 /// | 3+ | Unspecified |
 ///
-fn foobar() {}
-
-/// Individuals may have custom score functions with this type signature.
-///
-/// By default the npc_maker will parse the individual's score field into a single
-/// floating point number, with a default of `-inf` for missing or invalid scores.
-pub type Score = dyn Fn(&Individual) -> f64 + Send + Sync;
-
-const DEFAULT_SCORE: f64 = f64::NEG_INFINITY;
-
-fn default_score(individual: &Individual) -> f64 {
-    if let Some(score) = &individual.score {
-        score.parse().unwrap_or(DEFAULT_SCORE)
-    } else {
-        DEFAULT_SCORE
-    }
-}
-
-fn compare_scores(
-    score_fn: &Score,
-) -> impl Fn(&Arc<Mutex<Individual>>, &Arc<Mutex<Individual>>) -> std::cmp::Ordering {
-    move |a, b| {
-        let a_score = score_fn(&a.lock().unwrap());
-        let b_score = score_fn(&b.lock().unwrap());
-        match (a_score.is_nan(), b_score.is_nan()) {
-            (false, false) => a_score.total_cmp(&b_score),
-            (true, true) => a_score.total_cmp(&b_score),
-            (false, true) => std::cmp::Ordering::Greater,
-            (true, false) => std::cmp::Ordering::Less,
-        }
-        .reverse()
-    }
-}
-
-impl Evolution {
-    /// Argument `path` is a directory where this will save the population to.
-    /// If path is an empty string, a temporary directory will be created.
-    ///
-    /// Argument `replacement` controls how new members are added once the size of
-    /// the population reaches the population_size argument.
-    ///
-    /// Argument `selection` controls which individuals are allowed to mate and
-    /// with whom.
-    ///
-    /// Argument `score` is an optional custom scoring function.
-    ///
-    /// Argument `population_size` controls the total size of the mating
-    /// population.
-    ///
-    /// Argument `leaderboard_size` is the number of the best scoring individuals
-    /// to save in perpetuity. Set to zero to disable the leaderboard.
-    ///
-    /// Argument `hall_of_fame_size` is the number of individuals from each
-    /// generation to induct in to the hall of fame. Set to zero to disable the
-    /// hall of fame.
-
-    //
-
-    //
-
-    /// Force the next generation to replace the current generation, even if the
-    /// next generation has not reached the `population_size`. This is useful for
-    /// seeding a population with initial genetic material and then making
-    /// the seed material immediately available by calling this method.
-    pub fn rollover(&mut self) -> Result<(), Error> {
-        self.rollover_leaderboard()?;
-        self.rollover_hall_of_fame()?;
-        self.rollover_generation()?;
-        self.save()?;
-        Ok(())
-    }
-    fn rollover_leaderboard(&mut self) -> Result<(), Error> {
-        if self.leaderboard_size == 0 || self.waiting.is_empty() {
-            return Ok(());
-        }
-        let min_score = if self.leaderboard.len() >= self.leaderboard_size {
-            let individual = self.leaderboard.last().unwrap();
-            (*self.score)(&individual.lock().unwrap())
-        } else {
-            f64::NEG_INFINITY
-        };
-        // Sort together the existing leaderboard and the new contenders.
-        self.leaderboard.extend(
-            self.waiting
-                .iter()
-                .filter(|individual| (*self.score)(&individual.lock().unwrap()) > min_score)
-                .cloned(),
-        );
-        // Use stable sort to preserve ascension ordering.
-        self.leaderboard
-            .sort_by(compare_scores(self.score.as_ref()));
-        // Remove low performing individuals from the leaderboard directory.
-        if self.leaderboard.len() > self.leaderboard_size {
-            for individual in self.leaderboard.drain(self.leaderboard_size..) {
-                Individual::drop(individual)?;
-            }
-        }
-        Ok(())
-    }
-    fn rollover_hall_of_fame(&mut self) -> Result<(), Error> {
-        if self.hall_of_fame_size == 0 || self.waiting.is_empty() {
-            return Ok(());
-        }
-        // Find the highest scoring individuals in the new generation.
-        let n = self.hall_of_fame_size.min(self.waiting.len() - 1);
-        // This should be a stable sort but std does not support it.
-        self.waiting
-            .select_nth_unstable_by(n, compare_scores(self.score.as_ref()));
-        let winners = &mut self.waiting[..n];
-        winners.sort_unstable_by_key(|individual| individual.lock().unwrap().ascension);
-        self.hall_of_fame.extend_from_slice(winners);
-        Ok(())
-    }
-    fn rollover_generation(&mut self) -> Result<(), Error> {
-        self.generation += 1;
-        // Move the next generation into place.
-        if self.replacement == Replacement::Generation {
-            std::mem::swap(&mut self.members, &mut self.waiting);
-        }
-        // Discard the old generation.
-        for individual in self.waiting.drain(..) {
-            Individual::drop(individual)?;
-        }
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 mod tests {

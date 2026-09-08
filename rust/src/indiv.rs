@@ -188,7 +188,8 @@ impl Individual {
         individual
     }
 
-    fn file_name(&self) -> String {
+    /// Save files are always named after the individual they contain
+    pub fn file_name(&self) -> String {
         format!("{}.indiv", self.name)
     }
 

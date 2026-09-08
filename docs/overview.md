@@ -5,10 +5,10 @@ Each component is isolated in its own computer process with a well defined
 interface for interacting with the larger system. Components communicate
 over their standard input, output, and error channels. Messages are encoded
 in UTF-8 unless otherwise stated. Structured data is transmitted in JSON.
-This design is easy to implement and debug.
 
-The NPC Maker API is implemented in both python and rust. Components
-implemented in different languages communicate via the NPC Maker interfaces.
+This design is easy to implement and debug in any programming language.
+Components implemented in different languages can communicate via the NPC
+Maker's interfaces, which are available for Python and Rust.
 
 ## System Organization ##
 
