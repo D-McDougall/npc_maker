@@ -8,6 +8,11 @@ communicates with the environment over its standard I/O channels. Standard IO
 channels are UTF-8 unless otherwise stated.
 
 
+## Schematic Diagram ##
+
+![Schematic Diagram](images/controller_interface.svg)
+
+
 ## Command Line Invocation ##
 
 Controller programs are totally specified by their command line invocation.
@@ -25,7 +30,8 @@ following table summarizes the message types. The parts of the message format
 written in `[ALL_CAPS_AND_BRACKETS]` are placeholders for runtime data. In all
 messages the `[NUM]` and `[BYTES]` arguments form a binary array. 
 `[ID]` are non-negative integers that identify sensor and motor interfaces.
-By convention, sensor and motor interfaces are enumerated, separately, starting at zero.
+IDs are ASCII decmial numbers. By convention, sensor and motor interfaces are
+enumerated, separately, starting at zero.
 
 |  Message Type | Message Format | Arguments | Description |
 | :------------ | :------------- | :-------- | ----------- |

@@ -6,10 +6,9 @@ everything in it, including all of the living bodies and their control systems.
 The NPC Maker defines a standard interface for interacting with arbitrary environments.
 
 Environments always execute in a different computer process than the main
-router program of the NPC Maker framework, which is referred to as
-the "**evolution**" program. This separation has many advantages, chiefly
-that users can create and control environments using the programming language
-of their choice.
+router program of the NPC Maker framework. This separation has many
+advantages, chiefly that users can create and control environments using the
+programming language of their choice.
 
 Environments have two parts: a static description and an executable program.
 The static description contains all of the information needed to configure and
@@ -29,15 +28,17 @@ following table shows all of the expected attributes of the object.
 | `"name"`   | String | Required | Name of the environment, should be universally unique |
 | `"path"`   | String | Required | Filesystem path of the environment's executable program, relative to this file's parent directory |
 | `"spec"`   | String | Automatic | Filesystem path of the environment specification (this file) |
-| `"body_types"` | Array of BodySpecs | Required | Specification for each type of organism |
+| `"body_types"` | Array of BodyTypes | Required | Specification for each type of organism |
 | `"settings"` | Array of Settings | `[]` | Settings menu items for customizing the environment |
 | `"description"` | String | `""` | User facing documentation message |
-| Unspecified | Any |  | Environments may include extra information |
+| Unspecified | Any |  | This object may include extra attributes |
 
 Extra attributes are simply ignored so users may store miscellaneous data in
 this file. This file is given to the environment program as a command line
 argument, which allows one environment program to be reconfigured for multiple
 different scenarios.
+
+### BodyType Objects ###
 
 The "**body_types**" attribute is an array of body specification objects, which
 each describe the interface between this environment and a type of organism.
@@ -69,6 +70,8 @@ simply ignored.
 | `"name"` | String | Required | User facing name for this port, must be unique within its array |
 | `"description"` | String | `""` | User facing documentation message |
 | Unspecified | Any |  | Environments may include extra information about this interface |
+
+### Settings Objects ###
 
 The environment specification's "**settings**" attribute describes the command
 line arguments of the environment program. The user must finalize their

@@ -4,7 +4,7 @@ An "**individual**" is a distinct life-form with its own genome.
 Evolutionary algorithms operate on individuals, while genetic algorithms
 operate on genomes.
 
-## The Individual File Format ##
+## File Format ##
 
 Individuals are stored in a standard file format. An individual consist of a
 genome and a bundle of metadata. The genome is stored as a binary blob; the

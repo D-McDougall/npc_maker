@@ -30,11 +30,12 @@ which are also one-to-many relationships.
 ## Interface Specifications ##
 
 The NPC Maker interfaces are documented in the following chapters:
-* [The Environment Interface](/docs/environments.md)
-* [The Controller Interface](/docs/controllers.md)
-* [The Individual Interface](/docs/individuals.md)
-* [The Genetic Interface](/docs/genetics.md)
-* [The Evolution Interface](/docs/evolution.md)
+* [The Environment Interface 🔗](/docs/environments.md)
+* [The Controller Interface 🔗](/docs/controllers.md)
+* [The Individual Interface 🔗](/docs/individuals.md)
+* [The Genetic Interface 🔗](/docs/genetics.md)
+* [The Evolution Interface 🔗](/docs/evolution.md)
+* [The Router Interface 🔗](/docs/router.md)
 
 ### Standard Input Channel ###
 

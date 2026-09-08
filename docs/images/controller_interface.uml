@@ -8,7 +8,7 @@ frame "Environment Process" as env_proc {
 
     .. // constructor arguments // ..
     * environment specification
-    * body_type name
+    * body_type
     * controller command
     * stderr
     
@@ -16,9 +16,9 @@ frame "Environment Process" as env_proc {
     * genome(value)
     * reset()
     * advance(dt)
-    * set_input(gin, value)
-    * set_binary(gin, bytes)
-    * get_outputs(gin_list) -> values
+    * set_input(id, value)
+    * set_binary(id, bytes)
+    * get_outputs(id_list) -> values
     * save(path)
     * load(path)
     * custom(type, message)
@@ -40,7 +40,7 @@ stdout -[hidden]- stderr
 frame "Controller Sub-Process" as ctrl_proc {
 
   component main <<file>> [
-    **main.py**
+    **examples/ctrl/.../main.py**
     
     1| controller = MyController()
     2| controller.main()
@@ -58,9 +58,9 @@ frame "Controller Sub-Process" as ctrl_proc {
     * genome(value)
     * reset()
     * advance(dt)
-    * set_input(gin, value)
-    * set_binary(gin, bytes)
-    * get_output(gin) -> value
+    * set_input(id, value)
+    * set_binary(id, bytes)
+    * get_output(id) -> value
     * save(path)
     * load(path)
     * custom(type, message)
