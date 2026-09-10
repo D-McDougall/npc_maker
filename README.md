@@ -1,12 +1,13 @@
 # The NPC Maker #
 
 The NPC Maker is a toolkit for building and interacting with simulated
-environments populated by AI agents. It facilitates rapid development by
-providing software interfaces that separate the components of an
-artificial-life experiment. The NPC Maker also includes a collection of
-ready-to-use tools and environments.
+environments populated by AI agents. It facilitates rapid and collaborative
+development by providing software interfaces that decouple the components of
+an artificial-life experiment and allow independently developed components to
+work together. The NPC Maker also includes a collection of ready-to-use tools
+and environments.
 
-## [Documentation 🔗](/docs/overview.md) ##
+## [Interface Specifications 🔗](/docs/overview.md) ##
 
 ## Python API ##
 
