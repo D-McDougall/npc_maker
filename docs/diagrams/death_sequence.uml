@@ -1,0 +1,9 @@
+@startuml
+participant Evolution
+participant Router
+participant Environment
+
+Environment -> Router : {"Death": "UUID"}
+Router -> Evolution : ["death", "FILE_PATH"]
+
+@enduml

@@ -34,6 +34,13 @@ following structure:
 | 1, 2, 3, ... | Any | Arguments for command |
 
 
+### Command: spawn ###
+
+_message format:_ `["spawn"]`
+
+This function returns the initial genetic material.
+
+
 ### Command: asex ###
 
 _message format:_ `["asex", "PARENT_PATH"]`
@@ -61,7 +68,7 @@ However, it is an error to invoke an undefined command.
 Return values are written to standard output as JSON objects.
 
 Commands `asex` and `sex` return a genome-phenome pair, in the format:  
-`{"ctrl": ["CTRL_CMD", "ARGS", ...], "genome": GENOME, "phenome": PHENOME}\n`
+`{"controller": ["CTRL_CMD", "ARGS", ...], "genome": GENOME, "phenome": PHENOME}\n`
 
 Where `GENOME` and `PHENOME` are integer array lengths, encoded as ASCII
 decimal numbers. The new-line is immediately followed by the genome array and

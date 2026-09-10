@@ -1,0 +1,12 @@
+@startuml
+participant Genetics
+participant Router
+participant Environment
+participant Controller
+
+Environment -> Router : {"Mate": ["UUID", "UUID"]}
+Router -> Genetics : ["sex", "parent-path", "parent-path"]
+Genetics -> Router : {"controller": ..., "genome": ..., "phenome": ...}
+Router -> Environment : Name, Parents, Phenome
+Environment -> Controller : Phenome
+@enduml

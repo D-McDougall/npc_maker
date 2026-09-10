@@ -10,7 +10,7 @@ channels are UTF-8 unless otherwise stated.
 
 ## Schematic Diagram ##
 
-![Schematic Diagram](images/controller_interface.svg)
+![Schematic Diagram](diagrams/controller_interface.svg)
 
 
 ## Command Line Invocation ##

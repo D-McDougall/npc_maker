@@ -1,0 +1,15 @@
+@startuml
+participant Genetics
+participant Evolution
+participant Router
+participant Environment
+participant Controller
+
+Environment -> Router : {"Spawn": "BODY_TYPE"}
+Router -> Evolution : ["spawn"]
+Evolution -> Router : ["parent-path", ...]
+Router -> Genetics : ["sex", "parent-path", ...]
+Genetics -> Router : {"controller": ..., "genome": ..., "phenome": ...}
+Router -> Environment : Name, BodyType, Phenome
+Environment -> Controller : Phenome
+@enduml

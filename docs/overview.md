@@ -6,13 +6,13 @@ interface for interacting with the larger system. Components communicate
 over their standard input, output, and error channels. Messages are encoded
 in UTF-8 unless otherwise stated. Structured data is transmitted in JSON.
 
-This design is easy to implement and debug in any programming language.
+This design is easy to implement and debug for any programming language.
 Components implemented in different languages can communicate via the NPC
-Maker's interfaces, which are available for Python and Rust.
+Maker interfaces. The API is implemented for Python and Rust.
 
 ## System Organization ##
 
-![System Organization](images/system_organization.svg)
+![System Organization](diagrams/system_organization.svg)
 
 Artificial-life experiments are split into 5 component types:
 * **Router Programs** initialize and communicate between other components.
@@ -27,15 +27,11 @@ and they may contain multiple instances of the contained component.
 In the diagram above: arrows indicate parent-child relationships,
 which are also one-to-many relationships.
 
-## Interface Specifications ##
+## Component Programs ##
 
-The NPC Maker interfaces are documented in the following chapters:
-* [The Environment Interface 🔗](/docs/environments.md)
-* [The Controller Interface 🔗](/docs/controllers.md)
-* [The Individual Interface 🔗](/docs/individuals.md)
-* [The Genetic Interface 🔗](/docs/genetics.md)
-* [The Evolution Interface 🔗](/docs/evolution.md)
-* [The Router Interface 🔗](/docs/router.md)
+Each component is an executable program with well defined interfaces for
+interacting with the larger framework. The NPC Maker interfaces follow
+these conventions:
 
 ### Standard Input Channel ###
 
@@ -68,6 +64,16 @@ accordingly.
 
 To signal program termination without deadlocking: close both standard input
 and output channels.
+
+## Interface Specifications ##
+
+The NPC Maker interfaces are documented in the following chapters:
+* [The Environment Interface 🔗](/docs/environments.md)
+* [The Controller Interface 🔗](/docs/controllers.md)
+* [The Individual Interface 🔗](/docs/individuals.md)
+* [The Genetic Interface 🔗](/docs/genetics.md)
+* [The Evolution Interface 🔗](/docs/evolution.md)
+* [The Router Interface 🔗](/docs/router.md)
 
 ## Directory Structure ##
 

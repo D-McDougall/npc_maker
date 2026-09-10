@@ -1,0 +1,34 @@
+@startjson
+{
+    "name": "String",
+    "description": "String",
+    "computers": [
+        "localhost",
+        {
+            "name": "String",
+            "host": "String",
+            "port": "String",
+            "user": "String",
+            "pass": "String",
+            "Unspecified": "Any"
+        }
+    ],
+    "environment": {
+        "spec": "String",
+        "settings": [
+            [
+                "String"
+            ]
+        ]
+    },
+    "organisms": [
+        {
+            "body_type": "String",
+            "controller": [["String"]],
+            "evolution": [["String"]],
+            "genetics": [["String"]]
+        }
+    ],
+    "Unspecified": "Any"
+}
+@endjson

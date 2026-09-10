@@ -18,10 +18,11 @@ and running the environment.
 
 ## Environment Specification ##
 
-The environment specification completely describes a single distinct and
-self-contained environment. It is a JSON file encoded in UTF-8. It must use
-the "**.env**" file extension. The file contains a single JSON object. The
-following table shows all of the expected attributes of the object. 
+The "**environment specification file**" completely describes a single
+distinct and self-contained environment. It is a JSON file encoded in UTF-8.
+It must use the "**.env**" file extension. The file contains a single JSON
+object. The following table shows all of the expected attributes of the
+object. 
 
 | Attribute | JSON Type | Default Value | Description |
 | :-------- | :-------: | :------------ | :---------- |
@@ -106,9 +107,9 @@ The setting's "**type**" attribute must be one of the following strings or abbre
 </div>
 
 
-### Schematic Diagram of Environment Specification File ###
+### JSON Schema for .env Files ###
 
-![Schematic Diagram](images/environment_specification.svg)
+![Schematic Diagram](diagrams/environment_specification.svg)
 
 
 ## Environment Program ##
@@ -154,9 +155,9 @@ information about the new individual:
 | :-------- | :-------: | :---------- |
 | `"name"`        | String | Each individual is assigned a UUID for future reference |
 | `"body_type"`   | String | Name of the body_type that this individual is born into |
-| `"parents"`     | List of Strings | The UUIDs of the parents. May be empty, especially if created by a "New" request |
+| `"parents"`     | List of Strings | The UUIDs of the parents. May be empty, especially if created by a "Spawn" request |
 | `"controller"`  | List of Strings | Command line invocation of the controller program |
-| `"genome"`      | Number | Number of bytes in the genome |
+| `"genome"`      | Number | ASCII decimal, count of bytes in the genome |
 
 
 ### Standard Output Channel ###
