@@ -35,7 +35,11 @@
             "default": "Value",
             "minimum": "Number",
             "maximum": "Number",
-            "values": ["List", "of", "Strings"]
+            "values": [
+                [
+                    "String"
+                ]
+            ]
         }
     ],
     "Unspecified": "Any"

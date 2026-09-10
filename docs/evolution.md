@@ -19,8 +19,6 @@ Evolution programs are totally specified by their command line invocation.
 Both the program name and its arguments are considered part of the
 algorithm's identity.
 
-TODO: pass env spec and body type into here?
-
 ## Standard Input / Output Channels ##
 
 Evolutionary algorithms receive commands via their standard input channel.

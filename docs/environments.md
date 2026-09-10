@@ -20,7 +20,7 @@ and running the environment.
 
 The environment specification completely describes a single distinct and
 self-contained environment. It is a JSON file encoded in UTF-8. It must use
-the ".env" file extension. The file contains a single JSON object. The
+the "**.env**" file extension. The file contains a single JSON object. The
 following table shows all of the expected attributes of the object. 
 
 | Attribute | JSON Type | Default Value | Description |
@@ -54,6 +54,8 @@ body types here.
 | `"sensors"` | Array of Interfaces | Required | Sensory inputs to this agent's body |
 | `"motors"` | Array of Interfaces | Required | Motor outputs from this agent's body |
 | Unspecified | Any |  | Environments may include extra information about this body_type |
+
+### Interface Objects ###
 
 The "**sensors**" and "**motors**" arrays describe the connections between an
 agent's body in the environment and its control system. Both of these
@@ -104,7 +106,7 @@ The setting's "**type**" attribute must be one of the following strings or abbre
 </div>
 
 
-### Schematic Diagram of the Environment Specification ###
+### Schematic Diagram of Environment Specification File ###
 
 ![Schematic Diagram](images/environment_specification.svg)
 
