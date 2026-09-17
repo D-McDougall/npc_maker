@@ -19,7 +19,7 @@ table defines the standard metadata attributes:
 | `"environment"` | String    | Name of the environment that this individual lives in |
 | `"body_type"`   | String    | Name of the body_type used by this individual |
 | `"controller"`  | List of Strings | Command line invocation of the controller program |
-| `"score"`       | String    | Reproductive fitness of this individual, as assessed by the environment |
+| `"score"`       | Number    | Reproductive fitness of this individual, as assessed by the environment |
 | `"telemetry"`   | Map of Strings to Strings | Environmental info dictionary |
 | `"epigenome"`   | Map of Strings to Strings | Epigenetic info dictionary |
 | `"species"`     | String    | UUID for artificial speciation |

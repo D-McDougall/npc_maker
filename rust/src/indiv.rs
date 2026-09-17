@@ -56,7 +56,7 @@ pub struct Individual {
 
     /// Reproductive fitness of this individual, as assessed by the environment
     #[serde(default)]
-    pub score: Option<String>,
+    pub score: Option<f64>,
 
     /// Number of cohorts that passed before this individual was born
     #[serde(default)]

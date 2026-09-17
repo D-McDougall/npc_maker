@@ -104,7 +104,7 @@ class Individual:
             metadata, self.genome = data.split(b'\x00', maxsplit=1)
         return self.genome
 
-    def get_score(self) -> str:
+    def get_score(self) -> float:
         """
         Get the most recently assigned score,
         or None if it has not been assigned yet
@@ -114,9 +114,6 @@ class Individual:
     def get_custom_score(self, score_function="score") -> float:
         """
         Apply a custom scoring function to this individual
-
-        Several classes accept an optional custom score function,
-        and they delegate to this method.
 
         Argument score_function must be one of the following:
             * A callable function: f(individual) -> float,

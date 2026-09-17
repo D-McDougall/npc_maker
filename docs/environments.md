@@ -131,7 +131,7 @@ Words in ALLCAPS are placeholders for runtime data, which are all strings.
 | :----------- | :------------- | :---------- |
 | Spawn | `{"Spawn":"BODY_TYPE"}\n` | Request a new individual from the evolutionary algorithm |
 | Mate  | `{"Mate":["UUID","UUID"]}\n` | Request a new individual by mating individuals together. This requires at least one parent. This accepts more than two parents. All parents must be alive, in this environment, and having the same body_type |
-| Score | `{"Score":"VALUE","name":"UUID"}\n` | Report the score or reproductive fitness of a living individual |
+| Score | `{"Score":"VALUE","name":"UUID"}\n` | Report the score or reproductive fitness of a living individual. Scores are numbers transmitted as strings |
 | Telemetry | `{"Telemetry":{"KEY":"VALUE"},"name":"UUID"}\n` | The environment associates some extra information with a living individual. The info is kept alongside the individual in perpetuity |
 | Death | `{"Death":"UUID"}\n` | Report the death of an individual |
 

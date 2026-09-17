@@ -213,7 +213,7 @@ def mate(*parents):
     assert len(parents) > 0
     writeline(json.dumps({"Mate": parents}))
 
-def score(name, score):
+def score(name, score: float):
     """
     Report an individual's score or reproductive fitness to the evolution API
 

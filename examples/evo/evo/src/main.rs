@@ -403,7 +403,7 @@ fn score_fn(individual: &Individual) -> f64 {
     let Some(score) = individual.score.as_ref() else {
         return f64::NEG_INFINITY;
     };
-    score.parse().unwrap_or(f64::NEG_INFINITY)
+    *score
 }
 fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
     let a_score = score_fn(a);

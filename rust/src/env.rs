@@ -488,7 +488,7 @@ impl Environment {
         match message {
             JsonMessage::Score { name, value } => {
                 let individual = self.outstanding.get_mut(&name).unwrap();
-                individual.score = Some(value);
+                individual.score = Some(value.parse().unwrap());
                 Ok(None) // consume the message
             }
             JsonMessage::Telemetry { name, mut info } => {
