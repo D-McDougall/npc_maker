@@ -5,7 +5,7 @@
 	description = "Example evolutionary algorithms for the NPC Maker"
 
 [dev-dependencies]
-	process_anywhere = "0.4.1"
+	process_anywhere = "0.5"
 
 [dependencies]
 	mate_selection = "0.1.2"

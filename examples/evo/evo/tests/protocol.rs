@@ -1,12 +1,11 @@
 use npc_maker::evo::Evolution;
 use npc_maker::indiv::Individual;
-use process_anywhere::Computer;
+use process_anywhere::{Computer, Forwarder};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 #[test]
 fn test_protocol() {
-    let comp = Arc::new(Computer::new_local());
+    let comp = Computer::new_local();
     let prog = std::env::var("CARGO_BIN_EXE_evo").unwrap();
     let mut evo = Evolution::new(comp, &[prog]).unwrap();
     let empty: Vec<PathBuf> = vec![];

@@ -403,7 +403,7 @@ impl Environment {
     /// Tell the environment program to exit.
     pub fn quit(&mut self) {
         self.forward_stderr().unwrap();
-        self.process.close_stdin().unwrap();
+        self.process.close_stdio().unwrap();
     }
 
     /// Send an individual to the environment.

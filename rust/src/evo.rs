@@ -1,10 +1,10 @@
 //! Evolution interface, for building and using evolutionary algorithms
 
-use process_anywhere::{Computer, Process};
+use process_anywhere::{Computer, Forwarder, Process};
 use serde::Serialize;
 use std::io::{self, BufRead, StdinLock, StdoutLock, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -124,10 +124,16 @@ pub struct Evolution {
     process: Box<Process>,
 }
 
+static FORWARDER: OnceLock<Forwarder> = OnceLock::new();
+
 impl Evolution {
     /// Starts a new subprocess running the given command
     pub fn new(computer: Arc<Computer>, command: &[impl AsRef<str>]) -> Result<Self, Error> {
-        let process = Process::new(computer, command).unwrap();
+        let mut process = Process::new(computer, command).unwrap();
+        FORWARDER
+            .get_or_init(|| Forwarder::new(Box::new(std::io::stderr())))
+            .forward_stderr(&mut process)
+            .unwrap();
         Ok(Self { process })
     }
 
