@@ -33,20 +33,19 @@ Each component is an executable program with well defined interfaces for
 interacting with the larger framework. The NPC Maker interfaces follow
 these conventions:
 
-### Standard Input Channel ###
+### Invocation ###
 
-Messages on this channel are UTF-8 text possibly followed by binary blobs. The
-text of a message contains the size of the following binary blobs, as
+Programs are completely specified by their command line invocation.
+Both the program name and its arguments are considered part of its identity.
+
+### Standard Input & Output Channels ###
+
+Messages on these channel are UTF-8 text possibly followed by binary blobs.
+The text of a message will contain the size of the following binary blobs, as
 plain-text ASCII decimal numbers. The text portion of a message is always
 terminated by a line-feed character "\n". Carriage returns "\r" are
 considered trailing whitespace, which is permitted and should be removed by
 the receiver.
-
-### Standard Output Channel ###
-
-Messages on this channel are always single-line JSON values, encoded in UTF-8.
-New-lines are represented by the line-feed character `\n`; carriage return
-characters `\r` should be ignored.
 
 ### Standard Error Channel ###
 
@@ -59,7 +58,7 @@ turn forward its standard error to the user or a log file as appropriate.
 ### Errors and Termination ###
 
 In the event that any of the three standard I/O channels closes or emits an
-error, then all parties should assume the other party has died and act
+error, then all parties should assume the other party has died and proceed
 accordingly.
 
 To signal program termination without deadlocking: close both standard input
@@ -80,7 +79,11 @@ The NPC Maker interfaces are documented in the following chapters:
 * `/docs/` Interface Specifications
 * `/python/` Python language API for the NPC Maker interfaces
 * `/rust/` Rust language API for the NPC Maker interfaces
-* `/examples/env/` Example environments
 * `/examples/ctrl/` Example controllers
-* `/examples/evo/` Example evolutionary algorithms
 * `/examples/gen/` Example genetic algorithms
+* `/examples/env/` Example environments
+* `/examples/env/client/` Run environments over the internet
+* `/examples/evo/` Implementations of the Evolution API
+* `/examples/evo/evo/` Example evolutionary algorithms
+* `/examples/evo/player/` Population inspection utility
+* `/examples/router/` Main program for orchestrating experiments
