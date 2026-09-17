@@ -74,38 +74,6 @@ simply ignored.
 | `"description"` | String | `""` | User facing documentation message |
 | Unspecified | Any |  | Environments may include extra information about this interface |
 
-### Settings Objects ###
-
-The environment specification's "**settings**" attribute describes the command
-line arguments of the environment program. The user must finalize their
-settings before starting the environment program. The following table shows all
-of the expected attributes of settings objects, and extra attributes are *not*
-allowed.
-
-| Attribute | JSON Type | Default Value | Description |
-| :-------- | :-------: | :------------ | :---------- |
-| `"name"`        | String | Required | Name of this settings menu item, must be unique within the environment |
-| `"description"` | String | `""`     | User facing documentation message |
-| `"type"` | String | Required | Data type of this settings item |
-| `"default"` |  | Required | Value to use if this setting is missing |
-| `"minimum"` | Number | Required for Real and Integer types | Lower bound on the range of allowable values, inclusive |
-| `"maximum"` | Number | Required for Real and Integer types | Upper bound on the range of allowable values, inclusive |
-| `"values"`  | Array of Strings | Required for Enumeration type | Names of all of the variants of the enumeration |
-
-<div style="columns: 2">
-
-The setting's "**type**" attribute must be one of the following strings or abbreviated aliases:
-
-| Data Type       | Abbreviation |
-| :--------       | :----------- |
-| `"Real"`        | `"float"`    |
-| `"Integer"`     | `"int"`      |
-| `"Boolean"`     | `"bool"`     |
-| `"Enumeration"` | `"enum"`     |
-| `"String"`      | `"str"`      |
-
-</div>
-
 
 ### JSON Schema for .env Files ###
 
@@ -125,13 +93,6 @@ They are called with the following command line arguments:
 2) Either the word "graphical" or the word "headless" to indicate whether or not
 the environment should show graphical output to the user. This is useful for
 diagnostics and demonstrations.
-
-3) The remaining arguments are the user's settings, as `name` `value` pairs.
-These are described in the "settings" attribute of the environment
-specification.
-   * The settings may be in any order. 
-   * Missing settings are filled in with their default values. 
-   * Unexpected settings may be rejected. 
 
 
 ## Environment Protocol ##

@@ -37,10 +37,6 @@ pub struct EnvironmentSpec {
     /// Specification for each type of organism.
     pub body_types: Vec<BodySpec>,
 
-    /// Settings menu items for the user to customize the environment.
-    #[serde(default)]
-    pub settings: Vec<SettingsSpec>,
-
     /// Environments may include extra information.
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -107,122 +103,6 @@ pub struct InterfaceSpec {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-/// Description of an environmental parameter.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(tag = "type")]
-#[serde(deny_unknown_fields)]
-pub enum SettingsSpec {
-    #[serde(alias = "float")]
-    Real {
-        name: String,
-
-        #[serde(default)]
-        description: String,
-
-        /// Lower bound on the range of allowable values, inclusive.
-        minimum: f64,
-
-        /// Upper bound on the range of allowable values, inclusive.
-        maximum: f64,
-
-        default: f64,
-    },
-
-    #[serde(alias = "int")]
-    Integer {
-        name: String,
-
-        #[serde(default)]
-        description: String,
-
-        /// Lower bound on the range of allowable values, inclusive.
-        minimum: i64,
-
-        /// Upper bound on the range of allowable values, inclusive.
-        maximum: i64,
-
-        default: i64,
-    },
-
-    #[serde(alias = "bool")]
-    Boolean {
-        name: String,
-
-        #[serde(default)]
-        description: String,
-
-        default: bool,
-    },
-
-    #[serde(alias = "enum")]
-    Enumeration {
-        name: String,
-
-        #[serde(default)]
-        description: String,
-
-        /// Names of all of the variants of the enumeration.
-        values: Vec<String>,
-
-        default: String,
-    },
-
-    #[serde(alias = "str")]
-    String {
-        name: String,
-
-        #[serde(default)]
-        description: String,
-
-        default: String,
-    },
-}
-
-impl SettingsSpec {
-    /// Name of this settings menu item, must be unique within the environment.
-    pub fn name(&self) -> &str {
-        match self {
-            Self::Real { name, .. }
-            | Self::Integer { name, .. }
-            | Self::Boolean { name, .. }
-            | Self::Enumeration { name, .. }
-            | Self::String { name, .. } => name,
-        }
-    }
-
-    /// User facing documentation message.
-    pub fn description(&self) -> &str {
-        match self {
-            Self::Real { description, .. }
-            | Self::Integer { description, .. }
-            | Self::Boolean { description, .. }
-            | Self::Enumeration { description, .. }
-            | Self::String { description, .. } => description,
-        }
-    }
-
-    /// Data type.
-    pub fn r#type(&self) -> &str {
-        match self {
-            Self::Real { .. } => "Real",
-            Self::Integer { .. } => "Integer",
-            Self::Boolean { .. } => "Boolean",
-            Self::Enumeration { .. } => "Enumeration",
-            Self::String { .. } => "String",
-        }
-    }
-
-    pub fn default(&self) -> String {
-        match self {
-            Self::Real { default, .. } => default.to_string(),
-            Self::Integer { default, .. } => default.to_string(),
-            Self::Boolean { default, .. } => default.to_string(),
-            Self::Enumeration { default, .. } => default.to_string(),
-            Self::String { default, .. } => default.to_string(),
-        }
-    }
-}
-
 /// Display mode for environments.
 #[derive(Debug, Default, Serialize, Deserialize, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -272,14 +152,13 @@ impl From<bool> for Mode {
 
 /// Read the command line arguments for an environment program.
 ///
-/// Returns a tuple of (environment-specification, graphics-mode, settings-dict)
-pub fn get_args() -> (EnvironmentSpec, Mode, HashMap<String, String>) {
+/// Returns a tuple of (environment-specification, graphics-mode)
+pub fn get_args() -> (EnvironmentSpec, Mode) {
     // Read the command line arguments.
     let mut arg_iter = std::env::args();
     let _program = arg_iter.next();
     let spec_file = arg_iter.next();
     let mode = arg_iter.next();
-    let mut settings: Vec<String> = arg_iter.collect();
     // Read the environment specification file.
     let Some(spec_file) = spec_file else {
         panic!("Argument Error: missing environment specification")
@@ -298,26 +177,7 @@ pub fn get_args() -> (EnvironmentSpec, Mode, HashMap<String, String>) {
     } else {
         Mode::default()
     };
-    // Assemble the settings dictionary.
-    let mut defaults: HashMap<String, _> = env_spec
-        .settings
-        .iter()
-        .map(|item| (item.name().to_string(), item.default()))
-        .collect();
-    let mut settings = settings.chunks_exact_mut(2);
-    for chunk in &mut settings {
-        let item = std::mem::take(&mut chunk[0]);
-        let value = std::mem::take(&mut chunk[1]);
-        if !defaults.contains_key(&item) {
-            panic!("Argument Error: unexpected parameter \"{item}\"")
-        }
-        defaults.insert(item, value);
-    }
-    if !settings.into_remainder().is_empty() {
-        panic!("Argument Error: odd number of settings, expected key-value pairs");
-    }
-    //
-    (env_spec, mode, defaults)
+    (env_spec, mode)
 }
 
 /// Read the next individual from the evolution program, blocking.
@@ -468,7 +328,6 @@ pub fn death(individual: &str) {
 pub struct Environment {
     env_spec: Arc<EnvironmentSpec>,
     mode: Mode,
-    settings: HashMap<String, String>,
     process: Box<Process>,
     outstanding: HashMap<String, Box<indiv::Individual>>,
     stderr: Box<dyn Write>,
@@ -483,37 +342,24 @@ impl Environment {
     ///
     /// Argument `mode` controls whether the environment shows graphical output.
     ///
-    /// Argument `settings` is a dict of command line arguments for the environment process.
-    ///          These must match what is listed in the environment specification.
-    ///
     /// Argument `stderr` is the file descriptor to use for the subprocess's stderr channel.
     ///          By default, the controller will inherit this process's stderr channel.
     pub fn new(
         computer: Arc<Computer>,
         env_spec: Arc<EnvironmentSpec>,
         mode: Mode,
-        settings: HashMap<String, String>,
         stderr: Option<Box<dyn Write>>,
     ) -> Self {
         let stderr = stderr.unwrap_or_else(|| Box::new(io::stderr()));
         // Assemble the command line invocation.
-        let mut command = Vec::with_capacity(3 + 2 * env_spec.settings.len());
+        let mut command = Vec::with_capacity(3);
         command.push(env_spec.path.to_str().unwrap().to_string());
         command.push(env_spec.spec.to_str().unwrap().to_string());
         command.push(mode.to_string());
-        for arg in env_spec.settings.iter() {
-            command.push(arg.name().to_string());
-            if let Some(value) = settings.get(arg.name()) {
-                command.push(value.to_string());
-            } else {
-                command.push(arg.default());
-            }
-        }
         let command_str: Vec<&str> = command.iter().map(String::as_str).collect();
         Self {
             env_spec,
             mode,
-            settings,
             process: computer.exec(&command_str).unwrap(),
             outstanding: HashMap::new(),
             stderr,
@@ -541,11 +387,6 @@ impl Environment {
     /// Get the output display `mode` argument.
     pub fn get_mode(&self) -> Mode {
         self.mode
-    }
-
-    /// Get the `settings` argument.
-    pub fn get_settings(&self) -> &HashMap<String, String> {
-        &self.settings
     }
 
     /// Get all individuals who are currently alive in this environment.

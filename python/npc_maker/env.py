@@ -62,12 +62,10 @@ def Specification(env_spec_path):
         ("descr", "description"),
         ("bodies", "body_types"),])
     # Insert default values for missing keys.
-    env_spec.setdefault("settings", [])
     env_spec.setdefault("description", "")
     # Check first level data types.
     assert isinstance(env_spec["name"], str)
     assert isinstance(env_spec["body_types"], list)
-    assert isinstance(env_spec["settings"], list)
     assert isinstance(env_spec["description"], str)
     # Check body_type objects.
     for body_type in env_spec["body_types"]:
@@ -106,13 +104,6 @@ def Specification(env_spec_path):
     body_names = [body_type["name"] for body_type in env_spec["body_types"]]
     if len(body_names) != len(set(body_names)):
         raise ValueError("duplicate body type name in environment specification")
-    # Check settings objects.
-    for item in env_spec["settings"]:
-        _clean_settings(item)
-    # Check settings names are unique.
-    settings_names = [item["name"] for item in env_spec["settings"]]
-    if len(settings_names) != len(set(settings_names)):
-        raise ValueError("duplicate settings name in environment specification")
     # 
     return env_spec
 
@@ -136,83 +127,6 @@ def _alias_fields(json_object, aliases):
                     f"duplicate fields: \"{abrv}\" and \"{attr}\" in environment specification")
             json_object[attr] = json_object.pop(abrv)
 
-def _clean_settings(item):
-    """ Settings items are strictly / rigidly structured. """
-    _env_spec_check_fields(item, ("name", "type", "default",))
-    num_fields = 3
-
-    _alias_fields(item, [
-        ("desc", "description"),
-        ("descr", "description"),])
-    item["description"] = item.get("description", "")
-    num_fields += 1
-
-    # Normalize the type aliases.
-    if   item["type"] == "float": item["type"] = "Real"
-    elif item["type"] == "int":   item["type"] = "Integer"
-    elif item["type"] == "bool":  item["type"] = "Boolean"
-    elif item["type"] == "enum":  item["type"] = "Enumeration"
-    elif item["type"] == "str":   item["type"] = "String"
-    assert item["type"] in ("Real", "Integer", "Boolean", "Enumeration", "String")
-
-    # Clean each type variant.
-    if item["type"] == "Boolean":
-        item["default"] = bool(item["default"])
-
-    elif item["type"] in ("Real", "Integer"):
-        _env_spec_check_fields(item, ("minimum", "maximum",))
-        num_fields += 2
-        if item["type"] == "Real":
-            item["default"] = float(item["default"])
-            item["minimum"] = float(item["minimum"])
-            item["maximum"] = float(item["maximum"])
-        elif item["type"] == "Integer":
-            item["default"] = int(item["default"])
-            item["minimum"] = int(item["minimum"])
-            item["maximum"] = int(item["maximum"])
-        assert item["minimum"] <= item["default"]
-        assert item["maximum"] >= item["default"]
-
-    elif item["type"] == "Enumeration":
-        _env_spec_check_fields(item, ("values",))
-        num_fields += 1
-        item["default"] = str(item["default"])
-        item["values"]  = [str(variant) for variant in item["values"]]
-        assert len(item["values"]) == len(set(item["values"]))
-        assert item["default"] in item["values"]
-
-    elif item["type"] == "String":
-        item["default"] = str(item["default"])
-
-    if len(item) > num_fields:
-        name = item["name"]
-        raise ValueError(
-            f"unexpected attributes on setting \"{name}\" in environment specification")
-
-def _cast_env_settings(env_spec, settings):
-    """ Cast the command line argument settings to the data type specified in the environment specification. """
-    settings_list = env_spec.get("settings")
-    if settings_list is None:
-        return
-    settings_dict = {spec["name"]: spec for spec in settings_list}
-    for name, value in settings.items():
-        if spec := settings_dict.get(name):
-            data_type = spec.get("type")
-            if data_type == "Real" or data_type == "float":
-                settings[name] = float(value)
-            elif data_type == "Integer" or data_type == "int":
-                settings[name] = int(value)
-            elif data_type == "Boolean" or data_type == "bool":
-                if isinstance(value, str):
-                    value = value.lower()
-                    if   value == "false": value = False
-                    elif value == "true":  value = True
-                settings[name] = bool(value)
-            elif data_type == "Enumeration" or data_type == "enum":
-                settings[name] = str(value)
-            elif data_type == "String" or data_type == "str":
-                settings[name] = str(value)
-
 def _help_message(env_spec):
     # Usage.
     pass
@@ -223,33 +137,6 @@ def _help_message(env_spec):
     if desc:
         message += desc + "\n\n"
 
-    # Summary of body_types.
-    pass
-
-    # Summary of command line arguments.
-    settings = env_spec.get("settings", [])
-    if settings:
-        name_field      = max(len(item["name"]) for item in settings)
-        default_field   = max(len(str(item["default"])) for item in settings)
-        name_field      = max(name_field,    len("Argument"))
-        default_field   = max(default_field, len("Default"))
-        message += f"Type | Argument | Default | Range (inclusive) | Description \n"
-        message +=  "-----+----------+---------+-------------------+-------------\n"
-        for item in settings:
-            if   item["type"] == "Real":        line = "real | "
-            elif item["type"] == "Integer":     line = "int  | "
-            elif item["type"] == "Boolean":     line = "bool | "
-            elif item["type"] == "Enumeration": line = "enum | "
-            elif item["type"] == "String":      line = "str  | "
-            line += item["name"].ljust(name_field) + " | "
-            line += str(item["default"]).ljust(default_field) + " | "
-            if item["type"] == "Real" or item["type"] == "Integer":
-                line += str(item["minimum"]) + " - " + str(item["maximum"])
-            elif item["type"] == "Enumeration":
-                line += ", ".join(item["values"])
-            line += " | "
-            line += item["description"]
-            message += line + "\n"
     return message
 
 def get_args():
