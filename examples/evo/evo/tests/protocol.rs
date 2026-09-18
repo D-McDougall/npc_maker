@@ -13,7 +13,7 @@ fn test_protocol() {
     assert_eq!(dbg!(evo.spawn()).unwrap(), empty);
 
     let mut indiv = Individual::new("", "", &[""], Box::new(*b" "));
-    indiv.score = Some("1".to_string());
+    indiv.score = Some(1.0);
     indiv.save("").unwrap();
     evo.death(indiv.path.unwrap()).unwrap();
     evo.custom("rollover", &[]).unwrap();

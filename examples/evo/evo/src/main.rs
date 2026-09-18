@@ -2,7 +2,6 @@
 //!
 //! Features:
 //! * Many strategies for:
-//!     + Calculating agent score
 //!     + Selecting individuals to spawn
 //!     + Replacing individuals on death
 //! * Persistent save files
@@ -25,8 +24,6 @@ fn main() {
     evo.main().unwrap();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub const USAGE: &'static str = r#"evo PATH [--flag VALUE]"#;
@@ -45,8 +42,6 @@ the population reaches the population_size argument.
 
 Argument `selection` controls which individuals are allowed to mate and
 with whom.
-
-Argument `score` is an optional custom scoring function.
 
 Argument `population_size` controls the total size of the mating
 population.
@@ -68,9 +63,11 @@ pub struct Evolution {
 
     selection_fn: SelectionFn,
 
-    replacement: Replacement,
+    num_parents: usize,
 
     population_size: usize,
+
+    replacement: Replacement,
 
     leaderboard_size: usize,
 
@@ -86,7 +83,7 @@ pub struct Evolution {
 
     leaderboard: Vec<Individual>,
 
-    parents: Vec<Vec<PathBuf>>,
+    buffer: Vec<Vec<PathBuf>>,
 
     verbose: bool,
 }
@@ -120,14 +117,13 @@ pub enum Replacement {
 struct Metadata {
     selection: Vec<String>,
     replacement: Replacement,
+    num_parents: usize,
     population_size: usize,
     leaderboard_size: usize,
     hall_of_fame_size: usize,
     ascension: u64,
     generation: u64,
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 /// Getter / setter methods
 impl Evolution {
@@ -158,6 +154,10 @@ impl Evolution {
     pub fn get_selection(&self) -> Vec<String> {
         self.selection.clone()
     }
+    /// Get the `parents` argument
+    pub fn get_parents(&self) -> usize {
+        self.num_parents
+    }
     /// Get the `replacement` argument
     pub fn get_replacement(&self) -> Replacement {
         self.replacement
@@ -183,8 +183,6 @@ impl Evolution {
         self.generation
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 /// Methods to initialize, save, and load
 impl Evolution {
@@ -219,6 +217,7 @@ impl Evolution {
             replacement: Replacement::Generation,
             selection: vec!["exponential".to_string(), "10".to_string()],
             selection_fn: Box::new(mate_selection::RankedExponential(10)),
+            num_parents: 2,
             population_size: 100,
             leaderboard_size: 10,
             hall_of_fame_size: 0,
@@ -227,7 +226,7 @@ impl Evolution {
             population: vec![],
             waiting: vec![],
             leaderboard: vec![],
-            parents: vec![],
+            buffer: vec![],
             verbose: false,
         }
     }
@@ -265,7 +264,7 @@ impl Evolution {
                     self.population_size = value;
                 }
                 "-s" | "--selection" => {
-                    let (selection, selection_fn) = Self::parse_selection(args);
+                    let (selection, selection_fn) = parse_selection(args);
                     update = selection != self.selection;
                     self.selection = selection;
                     self.selection_fn = selection_fn;
@@ -284,6 +283,11 @@ impl Evolution {
                     let value: usize = args.remove(0).parse().unwrap();
                     update = value != self.hall_of_fame_size;
                     self.hall_of_fame_size = value;
+                }
+                "--parents" => {
+                    let value: usize = args.remove(0).parse().unwrap();
+                    update = value != self.num_parents;
+                    self.num_parents = value;
                 }
                 "-v" | "--verbose" => {
                     self.verbose = true;
@@ -304,31 +308,6 @@ impl Evolution {
         }
         update
     }
-    fn parse_selection(args: &mut Vec<String>) -> (Vec<String>, SelectionFn) {
-        let mut selection = vec![args.remove(0).to_lowercase()];
-        let selection_fn: SelectionFn = match selection[0].as_str() {
-            "best" => {
-                selection.push(args.remove(0));
-                Box::new(mate_selection::Best(selection[1].parse().unwrap()))
-            }
-            "normal" => todo!(),
-            "percent" => todo!(),
-            "score" => todo!(),
-            "random" => todo!(),
-            "ranked" => todo!(),
-            "exponential" => {
-                selection.push(args.remove(0));
-                Box::new(mate_selection::RankedExponential(
-                    selection[1].parse().unwrap(),
-                ))
-            }
-            arg0 => panic!(
-                "unexpected selection type, expected on of ... found {}",
-                arg0
-            ),
-        };
-        (selection, selection_fn)
-    }
     /// Initialize file & directory structures
     fn init(&mut self, path: PathBuf) -> Result<(), Error> {
         self.path = path;
@@ -344,6 +323,7 @@ impl Evolution {
     fn save(&self) -> Result<(), Error> {
         let metadata = Metadata {
             selection: self.get_selection(),
+            num_parents: self.get_parents(),
             replacement: self.get_replacement(),
             population_size: self.get_population_size(),
             leaderboard_size: self.get_leaderboard_size(),
@@ -366,7 +346,8 @@ impl Evolution {
         let mut metadata: Metadata = serde_json::from_slice(&json)?;
         self.replacement = metadata.replacement;
         (self.selection, self.selection_fn) =
-            Self::parse_selection(&mut std::mem::take(&mut metadata.selection));
+            parse_selection(&mut std::mem::take(&mut metadata.selection));
+        self.num_parents = metadata.num_parents;
         self.population_size = metadata.population_size;
         self.leaderboard_size = metadata.leaderboard_size;
         self.hall_of_fame_size = metadata.hall_of_fame_size;
@@ -380,8 +361,33 @@ impl Evolution {
         Ok(())
     }
 }
+pub fn parse_selection(args: &mut Vec<String>) -> (Vec<String>, SelectionFn) {
+    let mut selection = vec![args.remove(0).to_lowercase()];
+    let selection_fn: SelectionFn = match selection[0].as_str() {
+        "best" => {
+            selection.push(args.remove(0));
+            Box::new(mate_selection::Best(selection[1].parse().unwrap()))
+        }
+        "normal" => todo!(),
+        "percent" => todo!(),
+        "score" => todo!(),
+        "random" => todo!(),
+        "ranked" => todo!(),
+        "exponential" => {
+            selection.push(args.remove(0));
+            Box::new(mate_selection::RankedExponential(
+                selection[1].parse().unwrap(),
+            ))
+        }
+        arg0 => panic!(
+            "unexpected selection type, expected on of ... found {}",
+            arg0
+        ),
+    };
+    (selection, selection_fn)
+}
 impl Replacement {
-    fn parse(args: &mut Vec<String>) -> Replacement {
+    pub fn parse(args: &mut Vec<String>) -> Replacement {
         match args.remove(0).to_lowercase().as_str() {
             "generation" => Replacement::Generation,
             "worst" => Replacement::Worst,
@@ -406,8 +412,8 @@ fn score_fn(individual: &Individual) -> f64 {
     *score
 }
 fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
-    let a_score = score_fn(a);
-    let b_score = score_fn(b);
+    let a_score = a.score.unwrap_or(f64::NAN);
+    let b_score = b.score.unwrap_or(f64::NAN);
     a_score.total_cmp(&b_score).reverse().then_with(|| {
         a.ascension
             .unwrap_or(u64::MAX)
@@ -424,7 +430,7 @@ impl API for Evolution {
             return vec![];
         }
         // Refill parents buffer.
-        if self.parents.is_empty() {
+        if self.buffer.is_empty() {
             let rng = &mut rand::rng();
             let buffer_size = match self.replacement {
                 Replacement::Generation | Replacement::Frozen => self.population_size,
@@ -432,21 +438,16 @@ impl API for Evolution {
             };
             let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
             let mut index = self.selection_fn.pairs(rng, buffer_size, scores);
-            // Deduplicate all of the parents pairs.
-            // for pair in index.iter_mut() {
-            //     pair.sort_unstable();
-            //     pair.dedup();
-            // }
-            self.parents.reserve(index.len());
+            self.buffer.reserve(index.len());
             for pair in index {
-                self.parents.push(
+                self.buffer.push(
                     pair.iter()
                         .map(|&idx| self.population[idx].path.as_ref().unwrap().clone())
                         .collect(),
                 );
             }
         }
-        self.parents.pop().unwrap()
+        self.buffer.pop().unwrap()
     }
     /// Add a new individual to this population.
     fn death(&mut self, mut individual: PathBuf) {
@@ -469,45 +470,44 @@ impl API for Evolution {
                 // Action defered until next rollover event
             }
             Replacement::Random => {
-                // while !self.population.is_empty() && self.population.len() >= self.population_size {
-                //     let index = rand::random_range(0..self.population.len());
-                //     let random_individual = self.population.swap_remove(index);
-                //     Individual::drop(random_individual)?;
-                // }
+                while !self.population.is_empty() && self.population.len() >= self.population_size {
+                    let index = rand::random_range(0..self.population.len());
+                    let random_individual = self.population.swap_remove(index);
+                    random_individual.delete().unwrap();
+                }
                 individual.save(self.get_population_path()).unwrap();
                 self.population.push(individual.clone());
             }
             Replacement::Worst => {
-                // let compare_scores = compare_scores(self.score.as_ref());
-                // while !self.population.is_empty() && self.population.len() >= self.population_size {
-                //     let (worst_index, _worst_individual) = self
-                //         .population
-                //         .iter()
-                //         .enumerate()
-                //         .min_by(|a, b| compare_scores(a.1, b.1))
-                //         .unwrap();
-                //     let worst_individual = self.population.swap_remove(worst_index);
-                //     Individual::drop(worst_individual)?;
-                // }
+                while !self.population.is_empty() && self.population.len() >= self.population_size {
+                    let (worst_index, _worst_individual) = self
+                        .population
+                        .iter()
+                        .enumerate()
+                        .min_by(|a, b| a.1.score.unwrap().total_cmp(&b.1.score.unwrap()))
+                        .unwrap();
+                    let worst_individual = self.population.swap_remove(worst_index);
+                    worst_individual.delete().unwrap();
+                }
                 individual.save(self.get_population_path()).unwrap();
                 self.population.push(individual.clone());
             }
             Replacement::Oldest => {
-                // while !self.population.is_empty() && self.population.len() >= self.population_size {
-                //     let (oldest_index, _oldest_individual) = self
-                //         .population
-                //         .iter()
-                //         .enumerate()
-                //         .min_by_key(|(_index, individual)| individual.lock().unwrap().ascension)
-                //         .unwrap();
-                //     let oldest_individual = self.population.swap_remove(oldest_index);
-                //     Individual::drop(oldest_individual)?;
-                // }
+                while !self.population.is_empty() && self.population.len() >= self.population_size {
+                    let (oldest_index, _oldest_individual) = self
+                        .population
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_index, individual)| individual.ascension)
+                        .unwrap();
+                    let oldest_individual = self.population.swap_remove(oldest_index);
+                    oldest_individual.delete().unwrap();
+                }
                 individual.save(self.get_population_path()).unwrap();
                 self.population.push(individual.clone());
             }
         }
-        // Always save to waiting directory, even if not Replacement::Generation, for bookkeeping
+        // Always save to waiting directory for bookkeeping
         individual.save(&self.get_waiting_path()).unwrap();
         self.waiting.push(individual);
         if self.waiting.len() >= self.population_size {
@@ -530,7 +530,7 @@ impl API for Evolution {
 
 /// Rollover Events
 ///
-/// Generational rollover events happen every time population_size many
+/// Generational rollover events happen every time `population_size` many
 /// individuals die. On rollover:
 ///   * Replacement::Generation swaps in the new population
 ///   * Update Leaderboard
@@ -600,8 +600,8 @@ impl Evolution {
         self.generation += 1;
         if matches!(self.replacement, Replacement::Generation) {
             // Discard the current generation
-            for individual in self.waiting.drain(..) {
-                Individual::delete(individual)?;
+            for individual in self.population.drain(..) {
+                individual.delete()?;
             }
             // Move the waiting list files into the population directory
             let population_path = self.get_population_path();
@@ -616,7 +616,7 @@ impl Evolution {
         } else {
             // Clear the waiting list
             for individual in self.waiting.drain(..) {
-                Individual::delete(individual)?;
+                individual.delete()?;
             }
         }
         Ok(())
