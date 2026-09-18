@@ -4,7 +4,7 @@ use process_anywhere::{Computer, Forwarder};
 use std::path::PathBuf;
 
 #[test]
-fn test_protocol() {
+fn protocol() {
     let comp = Computer::new_local();
     let prog = std::env::var("CARGO_BIN_EXE_evo").unwrap();
     let mut evo = Evolution::new(comp, &[prog]).unwrap();
