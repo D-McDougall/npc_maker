@@ -8,7 +8,7 @@ in UTF-8 unless otherwise stated. Structured data is transmitted in JSON.
 
 This design is easy to implement and debug for any programming language.
 Components implemented in different languages can communicate via the NPC
-Maker interfaces. The API is implemented for Python and Rust.
+Maker interfaces. The API is currently implemented for Python and Rust.
 
 ## System Organization ##
 

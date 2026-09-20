@@ -7,7 +7,7 @@ an artificial-life experiment and allow independently developed components to
 work together. The NPC Maker also includes a collection of ready-to-use tools
 and environments.
 
-## [Interface Specifications 🔗](/docs/overview.md) ##
+## [Documentation 🔗](/docs/overview.md) ##
 
 ## Python API ##
 

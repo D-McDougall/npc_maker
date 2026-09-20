@@ -1,5 +1,5 @@
 [package]
-	name = "evo"
+	name = "npc-evo"
 	version = "0.1.0"
 	edition = "2024"
 	description = "Example evolutionary algorithms for the NPC Maker"

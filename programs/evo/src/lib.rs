@@ -1,4 +1,4 @@
-//! Program for running evolutionary algorithms
+//! Suite of evolutionary algorithms
 //!
 //! Features:
 //! * Many strategies for:
@@ -12,10 +12,7 @@ use mate_selection::MateSelection;
 use npc_maker::evo::{API, Error};
 use npc_maker::indiv::Individual;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fs;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -429,7 +426,7 @@ impl API for Evolution {
                 _ => 1,
             };
             let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
-            let mut index = self.selection_fn.pairs(rng, buffer_size, scores);
+            let index = self.selection_fn.pairs(rng, buffer_size, scores);
             self.buffer.reserve(index.len());
             for pair in index {
                 self.buffer.push(
@@ -442,7 +439,7 @@ impl API for Evolution {
         self.buffer.pop().unwrap()
     }
     /// Add a new individual to this population.
-    fn death(&mut self, mut individual: PathBuf) {
+    fn death(&mut self, individual: PathBuf) {
         // Bookkeeping on the Individual
         let mut individual = Individual::load(individual).unwrap();
         assert!(individual.ascension.is_none());
@@ -507,7 +504,7 @@ impl API for Evolution {
         }
     }
     /// Receive a non-standard command
-    fn custom(&mut self, command: String, arguments: Vec<serde_json::Value>) -> serde_json::Value {
+    fn custom(&mut self, command: String, _arguments: Vec<serde_json::Value>) -> serde_json::Value {
         match command.as_str() {
             "rollover" => {
                 self.rollover().unwrap();
@@ -566,7 +563,7 @@ impl Evolution {
         // Remove low performing individuals from the leaderboard directory.
         if self.leaderboard.len() > self.leaderboard_size {
             for individual in self.leaderboard.drain(self.leaderboard_size..) {
-                Individual::drop(individual)?;
+                individual.delete()?;
             }
         }
         */
