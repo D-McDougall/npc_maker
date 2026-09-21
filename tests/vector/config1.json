@@ -1,0 +1,12 @@
+{
+	"name": "vector-test-1",
+	"environment": ["python3", "env.py"],
+	"organisms": [
+		{
+			"body_type": "vector",
+			"controller": [],
+			"genetics": ["python3", "gen.py"],
+			"evolution": ["evo"],
+		}
+	]
+}

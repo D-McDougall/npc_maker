@@ -1,5 +1,20 @@
 # Player #
 
+This python program provides a suite of utilities for spawning from a fully
+evolved population.
+
+Features:
+* Custom score functions, using python `eval()`
+* Many strategies for selecting individuals based on their score
+* Serve individuals from many sources:
+	+ Current population
+	+ Leaderboad
+	+ Hall of Fame
+	+ Seed genetic material
+
+
+
+
 TODO
 
 The player program is a utility for evaluating evolutionary progress. It

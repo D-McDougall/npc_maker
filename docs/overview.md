@@ -82,8 +82,7 @@ The NPC Maker interfaces are documented in the following chapters:
 * `/examples/ctrl/` Example controllers
 * `/examples/gen/` Example genetic algorithms
 * `/examples/env/` Example environments
-* `/examples/env/client/` Run environments over the internet
-* `/examples/evo/` Implementations of the Evolution API
-* `/examples/evo/evo/` Example evolutionary algorithms
-* `/examples/evo/player/` Population inspection utility
-* `/examples/router/` Main program for orchestrating experiments
+* `/programs/client/` Run environments over the internet
+* `/programs/evo/` Suite of evolutionary algorithms
+* `/programs/player/` Population inspection utility
+* `/programs/maker/` Main program for orchestrating experiments
