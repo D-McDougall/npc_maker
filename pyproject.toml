@@ -1,0 +1,35 @@
+[build-system]
+    requires = ["setuptools>=68", "wheel"]
+    build-backend = "setuptools.build_meta"
+
+[project]
+    name = "npc-maker"
+    version = "0.4.0"
+    requires-python = ">=3.12"
+    readme = "README.md"
+    license = "MIT-0"
+    authors = [
+        { name = "David McDougall", email = "dam1784@rit.edu" },
+    ]
+    description = "Evolve AIs in simulated environments"
+    keywords = ["Evolution", "Artificial-Life", "AI"]
+    classifiers = [
+        "Natural Language :: English",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Artificial Life",
+    ]
+    dependencies = []
+
+[project.urls]
+    Repository = "https://github.com/D-McDougall/npc_maker"
+
+[tool.setuptools]
+    package-dir = {"" = "python"}
+
+[project.scripts]
+    npc-maker = "npc_maker.programs.maker:main"
+    npc-evo = "npc_maker.programs.launcher:npc_evo_main"
+    npc-player = "npc_maker.programs.player:main"
+    npc-client = "npc_maker.programs.client:main"
