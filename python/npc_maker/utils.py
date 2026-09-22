@@ -14,7 +14,7 @@ def eprint(*args, **kwargs):
     """
     print(*args, **kwargs, file=sys.stderr, flush=True)
 
-def clean_command(command, resolve=True) -> [str]:
+def clean_command(command) -> [str]:
     """
     Check user input executable command strings
     """
@@ -29,8 +29,7 @@ def clean_command(command, resolve=True) -> [str]:
     if not command:
         return None
     program = Path(command[0])
-    if resolve:
-        program = program.expanduser().resolve()
+    program = program.expanduser()
     command[0] = program
     for index in range(1, len(command)):
         arg = command[index]
@@ -202,7 +201,7 @@ class _Instance:
         """
         Argument command is the command line invocation for the API program.
         This accepts either a shell-command string, or a list or strings in
-        which case the first value is the program and the remaining strings
+        which case the first value is the program path and the remaining strings
         are its command line arguments.
 
         Argument stderr is the file descriptor to use for the subprocess's
@@ -210,7 +209,7 @@ class _Instance:
         process's stderr channel.
         """
         self.command    = clean_command(command)
-        self._worker    = subprocess.Popen(self.command,
+        self._process   = subprocess.Popen(self.command,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
             stderr      = stderr)
@@ -219,7 +218,7 @@ class _Instance:
         """
         Check if the API subprocess is still running or if it has exited
         """
-        return self._worker.returncode is None
+        return self._process.returncode is None
 
     def get_command(self):
         """
@@ -237,7 +236,7 @@ class _Instance:
         """
         Get the standard error channel from the subprocess
         """
-        return self._worker.stderr
+        return self._process.stderr
 
     def __repr__(self):
         mod = type(self).__module__
@@ -261,13 +260,13 @@ class _Instance:
         command = [name] + arguments
         command = json.dumps(command)
         assert '\n' not in command
-        self._worker.stdin.write(command.encode("utf-8"))
+        self._process.stdin.write(command.encode("utf-8"))
         response = readline()
         return json.loads(response)
 
     def __del__(self):
-        if hasattr(self, "_worker"):
-            for pipe in (self._worker.stdin, self._worker.stdout):
+        if hasattr(self, "_process"):
+            for pipe in (self._process.stdin, self._process.stdout):
                 if not pipe.closed:
                     try:
                         pipe.close()

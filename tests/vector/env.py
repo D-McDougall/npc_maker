@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from npc_maker import env
 
 def main():

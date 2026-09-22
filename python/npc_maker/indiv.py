@@ -53,8 +53,7 @@ class Individual:
         self.name           = str(uuid.uuid4())
         self.environment    = str(environment)
         self.body_type      = str(body_type)
-        # Don't resolve the path because the PWD could change.
-        self.controller     = clean_command(controller, resolve=False)
+        self.controller     = clean_command(controller)
         self.genome         = genome
         self.score          = None
         self.telemetry      = {}

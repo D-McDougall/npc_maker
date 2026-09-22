@@ -3,24 +3,19 @@ Experiment Interface, for whole-system configuration of the NPC Maker
 """
 
 import json
+from pathlib import Path
 
 class Experiment:
     """
     Container for experiment configuration files (.exp)
     """
-    @classmethod
-    def load(cls, path):
+    def __init__(self, path):
         """
         Load an experiment configuration file (.exp) from path
         """
-        with open(path, 'rt') as file:
-            data = json.load(file)
-        return cls(data)
-
-    def __init__(self, config):
-        """
-        Accepts a decoded JSON object
-        """
+        self.path = Path(path)
+        with open(self.path, 'rt') as file:
+            config = json.load(file)
         self.name        = config.get("name", "")
         self.description = config.get("description", "")
         self.computers   = config.get("computers", [])

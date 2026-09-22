@@ -29,7 +29,8 @@
     package-dir = {"" = "python"}
 
 [project.scripts]
-    npc-maker = "npc_maker.programs.maker:main"
+    "npc-maker.py" = "npc_maker.programs.maker:main"
+    npc-maker = "npc_maker.programs.launcher:npc_maker_main"
     npc-evo = "npc_maker.programs.launcher:npc_evo_main"
     npc-player = "npc_maker.programs.player:main"
     npc-client = "npc_maker.programs.client:main"

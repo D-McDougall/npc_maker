@@ -10,7 +10,7 @@ from pathlib import Path
 __all__ = (
     "API",
     "eprint",
-    "Genetic",
+    "Genetics",
 )
 
 class API(_API):
@@ -49,7 +49,7 @@ class API(_API):
         else:
             self.custom(name, args)
 
-class Genetic(_Instance):
+class Genetics(_Instance):
     """
     An instance of a genetic algorithm
 
