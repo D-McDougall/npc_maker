@@ -7,7 +7,7 @@
     description = "Evolve AIs in simulated environments"
     repository = "https://github.com/D-McDougall/npc_maker"
     categories = ["science"]
-    keywords = ["ai", "alife", "evolution"]
+    keywords = ["ai", "alife", "evolution", "npc_maker"]
 
 [lib]
     doctest = false

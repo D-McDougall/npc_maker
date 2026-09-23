@@ -1,10 +1,14 @@
-import subprocess
 from pathlib import Path
+import os
+import subprocess
 
-working_dir = Path(__file__).parent
+# Add the CWD to the system PATH
+os.environ["PATH"] = os.pathsep.join([".", os.environ.get("PATH", "")])
 
 def run(*args):
 	return subprocess.run(*args, check=True)
+
+working_dir = Path(__file__).parent
 
 
 # TODO: loop over all .exp files in working_dir

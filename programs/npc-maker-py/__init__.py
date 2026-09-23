@@ -29,6 +29,6 @@ def main():
 
     # Main loop
     while True:
-        for env in environments:
-            message = env.poll()
-            print(message)
+        message = env.poll()
+        # print(message)
+

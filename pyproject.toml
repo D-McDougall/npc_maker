@@ -12,7 +12,7 @@
         { name = "David McDougall", email = "dam1784@rit.edu" },
     ]
     description = "Evolve AIs in simulated environments"
-    keywords = ["Evolution", "Artificial-Life", "AI"]
+    keywords = ["Evolution", "alife", "Artificial-Life", "AI", "npc_maker"]
     classifiers = [
         "Natural Language :: English",
         "Operating System :: OS Independent",
@@ -25,12 +25,12 @@
 [project.urls]
     Repository = "https://github.com/D-McDougall/npc_maker"
 
-[tool.setuptools]
-    package-dir = {"" = "python"}
+[tool.setuptools.packages.find]
+    where = ["python", "programs"]
+    exclude = ["tests"]
+    namespaces = false
 
 [project.scripts]
     "npc-maker.py" = "npc_maker.programs.maker:main"
-    npc-maker = "npc_maker.programs.launcher:npc_maker_main"
-    npc-evo = "npc_maker.programs.launcher:npc_evo_main"
-    npc-player = "npc_maker.programs.player:main"
+    npc-player = "npc_player:main"
     npc-client = "npc_maker.programs.client:main"
