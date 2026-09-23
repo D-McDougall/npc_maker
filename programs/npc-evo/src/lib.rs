@@ -336,8 +336,7 @@ impl Evolution {
         let json = fs::read(&self.get_metadata_path())?;
         let mut metadata: Metadata = serde_json::from_slice(&json)?;
         self.replacement = metadata.replacement;
-        (self.selection, self.selection_fn) =
-            parse_selection(&mut std::mem::take(&mut metadata.selection));
+        (self.selection, self.selection_fn) = parse_selection(&mut std::mem::take(&mut metadata.selection));
         self.num_parents = metadata.num_parents;
         self.population_size = metadata.population_size;
         self.leaderboard_size = metadata.leaderboard_size;
@@ -366,14 +365,9 @@ pub fn parse_selection(args: &mut Vec<String>) -> (Vec<String>, SelectionFn) {
         "ranked" => todo!(),
         "exponential" => {
             selection.push(args.remove(0));
-            Box::new(mate_selection::RankedExponential(
-                selection[1].parse().unwrap(),
-            ))
+            Box::new(mate_selection::RankedExponential(selection[1].parse().unwrap()))
         }
-        arg0 => panic!(
-            "unexpected selection type, expected on of ... found {}",
-            arg0
-        ),
+        arg0 => panic!("unexpected selection type, expected on of ... found {}", arg0),
     };
     (selection, selection_fn)
 }
@@ -403,11 +397,10 @@ fn score_fn(individual: &Individual) -> f64 {
 fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
     let a_score = a.score.unwrap_or(f64::NAN);
     let b_score = b.score.unwrap_or(f64::NAN);
-    a_score.total_cmp(&b_score).reverse().then_with(|| {
-        a.ascension
-            .unwrap_or(u64::MAX)
-            .cmp(&b.ascension.unwrap_or(u64::MAX))
-    })
+    a_score
+        .total_cmp(&b_score)
+        .reverse()
+        .then_with(|| a.ascension.unwrap_or(u64::MAX).cmp(&b.ascension.unwrap_or(u64::MAX)))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

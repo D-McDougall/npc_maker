@@ -137,6 +137,11 @@ impl Evolution {
         Ok(Self { process })
     }
 
+    /// Is the evolution program still active or has it terminated?
+    pub fn is_alive(&mut self) -> Result<bool, Error> {
+        Ok(self.process.is_alive()?)
+    }
+
     /// Request a set of parents to mate together
     pub fn spawn(&mut self) -> Result<Vec<PathBuf>, Error> {
         self.process.send_line(r#"["spawn"]"#)?;

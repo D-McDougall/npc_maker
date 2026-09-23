@@ -76,13 +76,19 @@ The NPC Maker interfaces are documented in the following chapters:
 
 ## Directory Structure ##
 
-* `/docs/` Interface Specifications
-* `/python/` Python language API for the NPC Maker interfaces
-* `/rust/` Rust language API for the NPC Maker interfaces
-* `/examples/ctrl/` Example controllers
-* `/examples/gen/` Example genetic algorithms
-* `/examples/env/` Example environments
-* `/programs/client/` Run environments over the internet
-* `/programs/evo/` Suite of evolutionary algorithms
-* `/programs/player/` Population inspection utility
-* `/programs/maker/` Main program for orchestrating experiments
+| Folder      | Description |
+| :---------- | :---------- |
+| `docs/`     | Documentation and Interface Specifications
+| `python/`   | Python API for using the NPC Maker interfaces
+| `rust/`     | Rust API for using the NPC Maker interfaces
+| `programs/` | Executable programs bundled with the NPC Maker
+| `programs/npc-client/`   | Run environments over the internet |
+| `programs/npc-evo/`      | Suite of evolutionary algorithms |
+| `programs/npc-player/`   | Population inspection utility |
+| `programs/npc-maker/`    | Main program for orchestrating experiments |
+| `programs/npc-maker-py/` | Simplified python version of npc-maker program |
+| `tests/`    | Integration and Regression tests
+| `examples/` |  |
+| `examples/ctrl/` | Example controllers |
+| `examples/gen/`  | Example genetic algorithms |
+| `examples/env/`  | Example environments |

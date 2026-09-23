@@ -1,13 +1,15 @@
 use npc_maker::evo::Evolution;
 use npc_maker::indiv::Individual;
-use process_anywhere::{Computer, Forwarder};
+use process_anywhere::Computer;
 use std::path::PathBuf;
 
 #[test]
 fn protocol() {
     let comp = Computer::new_local();
-    let prog = std::env::var("CARGO_BIN_EXE_evo").unwrap();
+    let prog = std::env::var("CARGO_BIN_EXE_npc-evo").unwrap();
     let mut evo = Evolution::new(comp, &[prog]).unwrap();
+    assert!(evo.is_alive().unwrap());
+
     let empty: Vec<PathBuf> = vec![];
     assert_eq!(dbg!(evo.spawn()).unwrap(), empty);
     assert_eq!(dbg!(evo.spawn()).unwrap(), empty);
