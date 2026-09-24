@@ -28,9 +28,7 @@ def clean_command(command) -> [str]:
         command = list(command)
     if not command:
         return None
-    program = Path(command[0])
-    program = program.expanduser()
-    command[0] = program
+    command[0] = Path(command[0])
     for index in range(1, len(command)):
         arg = command[index]
         if not isinstance(arg, bytes) and not isinstance(arg, str):

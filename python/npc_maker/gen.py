@@ -91,6 +91,9 @@ class Genetics(_Instance):
         self._worker.stdin.flush()
         return self._read_response()
 
+    def phenome(self, individual) -> bytes:
+        1/0 # todo
+
     def _read_response(self):
         response = readline()
         response = json.loads(response)

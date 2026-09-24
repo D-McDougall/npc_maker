@@ -1,7 +1,9 @@
+#!/usr/bin/env python
 """
 Simplified router program for testing and debugging the NPC Maker
 """
 
+from npc_maker.utils import eprint
 from npc_maker.exp import Experiment
 from npc_maker.env import Environment
 from npc_maker.evo import Evolution
@@ -14,7 +16,12 @@ def main():
     parser.add_argument('filename', help='experiment file (.exp)')
     args = parser.parse_args()
 
-    config = Experiment(args.filename)
+    try:
+        config = Experiment(args.filename)
+    except Exception as error:
+        eprint(f"{type(error).__name__} in \"{args.filename}\": {error}")
+        exit(5)
+
     chdir(config.path.parent)
 
     # Start one instance of the environment
@@ -30,5 +37,9 @@ def main():
     # Main loop
     while True:
         message = env.poll()
-        # print(message)
+        print(message)
+        import time
+        time.sleep(1)
 
+if __name__ == "__main__":
+    main()

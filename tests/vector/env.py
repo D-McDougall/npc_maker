@@ -9,3 +9,6 @@ def main():
         score = 1/0
         env.score(indiv.name, score)
         env.death(indiv.name)
+
+if __name__ == "__main__":
+    main()
