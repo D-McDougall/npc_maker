@@ -79,7 +79,7 @@ pub trait API {
             Ok(())
         }
         // Command-response loop
-        let retval: Result<(), Error> = loop {
+        let mut retval: Result<(), Error> = loop {
             let (command, arguments) = match read_json(&mut stdin_handle) {
                 Ok(pair) => pair,
                 Err(err) => break Err(err),
@@ -112,6 +112,14 @@ pub trait API {
             }
         };
         self.quit();
+        // Catch and silence EOF errors
+        if let Err(Error::Json(error)) = &retval {
+            if error.is_eof() {
+                retval = Ok(());
+            }
+        }
+        // Catch and silence BrokenPipe errors
+        // todo!();
         retval
     }
 }

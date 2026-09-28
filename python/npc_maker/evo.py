@@ -66,9 +66,16 @@ class Evolution(_Instance):
     def spawn(self) -> '[Individual]':
         """
         """
-        1/0
+        self._process.stdin.write(b"[Spawn]\n")
+        response = self._process.stdout.readline()
+        return json.loads(response)
 
     def death(self, individual):
         """
         """
-        1/0
+        if isinstance(individual, Individual):
+            individual = individual.get_path()
+        else:
+            individual = Path(individual)
+        command = json.dumps(["Death", individual])
+        self._process.stdin.write(command.encode("utf-8"))

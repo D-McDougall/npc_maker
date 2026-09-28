@@ -128,9 +128,15 @@ def close_stdio():
     This signals to the calling program that this program has quit 
     """
     if not sys.stdout.closed:
-        sys.stdout.close()
+        try:
+            sys.stdout.close()
+        except BrokenPipeError:
+            pass
     if _stdin is not None and not _stdin.closed:
-        _stdin.close()
+        try:
+            _stdin.close()
+        except BrokenPipeError:
+            pass
 
 class _API:
     """
@@ -243,7 +249,7 @@ class _Instance:
 
     def custom(self, name, arguments) -> object:
         """
-        Send a custom message to the genetic algorithm
+        Send a custom message to this process
 
         Argument name is any string not already in use by the protocol.
                  The name identifies which command / operation to perform.
@@ -259,7 +265,7 @@ class _Instance:
         command = json.dumps(command)
         assert '\n' not in command
         self._process.stdin.write(command.encode("utf-8"))
-        response = readline()
+        response = self._process.stdout.readline()
         return json.loads(response)
 
     def __del__(self):

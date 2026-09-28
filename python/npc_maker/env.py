@@ -436,7 +436,7 @@ class Environment:
             if len(all_body_types) == 1:
                 body_type = all_body_types[0]["name"]
             else:
-                raise ValueError("missing body_type")
+                raise ValueError("message missing field \"body_type\"")
         return str(body_type)
 
     def _get_name(self, name):
@@ -447,10 +447,10 @@ class Environment:
             if len(self._outstanding) == 1:
                 name = next(self._outstanding)
             else:
-                raise ValueError("missing name")
+                raise ValueError("message missing field \"name\"")
         return str(name)
 
-    def birth(self, individual):
+    def birth(self, individual, phenome: bytes):
         """
         Send an individual to the environment.
         Does not flush.
@@ -461,9 +461,9 @@ class Environment:
             body_type = ""
         controller = individual.get_controller()
         if not controller:
-            raise ValueError("missing controller")
+            raise ValueError("message missing field \"controller\"")
         controller[0] = str(controller[0]) # Convert Path to String
-        phenome = individual.get_phenome()
+        phenome = bytes(phenome)
         metadata = {
             "name": individual.name,
             "body_type": body_type,
@@ -507,57 +507,23 @@ class Environment:
 
         # Process the message if able.
         if "Score" in message:
-            score       = message["Score"]
-            name        = message["name"]
+            score       = float(message["Score"])
+            name        = self._get_name(message["name"])
             individual  = self._outstanding[name]
             individual.score = score
             return # consume the message
 
         elif "Telemetry" in message:
             info        = message["Telemetry"]
-            name        = message["name"]
+            name        = self._get_name(message["name"])
             individual  = self._outstanding[name]
             individual.telemetry.update(info)
             return # consume the message
 
         elif "Death" in message:
-            name        = message["Death"]
+            name        = self._get_name(message["Death"])
             individual  = self._outstanding.pop(name)
             individual.death_date = _timestamp()
             message["Death"] = individual
 
         return message
-
-    def evolve(self, body_types):
-        """
-        Argument body_types is a dict of evolution API instances, indexed by body_type name.
-
-        Returns either None or an Individual if one was just born or died.
-        """
-        message = self.poll()
-        if not message:
-            return
-
-        if "Spawn" in message:
-            pop_name   = message["Spawn"]
-            individual = body_types[pop_name].spawn()
-            if not individual.get_body_type():
-                individual.body_type = pop_name
-            self.birth(individual)
-            return individual
-
-        elif "Mate" in message:
-            parents = [self._outstanding[parent] for parent in message["Mate"]]
-            if   len(parents) == 1: individual = parents[0].clone()
-            elif len(parents) == 2: individual = parents[0].mate(parents[1])
-            self.birth(individual)
-            return individual
-
-        elif "Death" in message:
-            individual = message["Death"]
-            pop_name   = self._get_body_type(individual.get_body_type())
-            body_types[pop_name].death(individual)
-            return individual
-
-        else:
-            raise ValueError(f'unrecognized message "{message}"')

@@ -6,10 +6,12 @@ Simplified router program for testing and debugging the NPC Maker
 from npc_maker.utils import eprint
 from npc_maker.exp import Experiment
 from npc_maker.env import Environment
+from npc_maker.indiv import Individual
 from npc_maker.evo import Evolution
 from npc_maker.gen import Genetics
 from os import chdir
 import argparse
+import time
 
 def main():
     parser = argparse.ArgumentParser(prog='npc-maker.py', description=__doc__)
@@ -37,9 +39,19 @@ def main():
     # Main loop
     while True:
         message = env.poll()
-        print(message)
-        import time
-        time.sleep(1)
+        if message is None:
+            time.sleep(0) # Yield thread
+        elif "Spawn" in message:
+            body_type = message["Spawn"]
+            parent = evo[body_type].spawn()
+            genome, phenome = gen[body_type].asex(parent)
+            individual = parent.asex(genome)
+            env.birth(individual, phenome)
+        elif "Death" in message:
+            individual = message["Death"]
+            evo[individual.get_body_type()].death(individual)
+        else:
+            raise ValueError(f'unrecognized message "{message}"')
 
 if __name__ == "__main__":
     main()
