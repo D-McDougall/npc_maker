@@ -2,7 +2,6 @@
     name = "npc-evo"
     version = "0.1.0"
     edition = "2024"
-    rust-version = "1.86"
     license = "MIT-0"
     description = "Example evolutionary algorithms for the NPC Maker"
     repository = "https://github.com/D-McDougall/npc_maker"

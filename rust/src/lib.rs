@@ -7,8 +7,11 @@
 pub mod ctrl;
 pub mod env;
 pub mod evo;
-pub mod r#gen;
 pub mod indiv;
+
+pub mod hello_world {
+    tonic::include_proto!("evo");
+}
 
 fn read_bytes(reader: &mut impl std::io::BufRead, len: usize) -> std::io::Result<Box<[u8]>> {
     use std::mem::{MaybeUninit, transmute};

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package gen;
+
+service Genetics {
+  rpc Reproduce(stream Individual) returns (Child);
+  rpc Phenome(Individual) returns (PhenomeResponse);
+}
+
+message Individual {
+  string metadata = 1;
+  bytes genome = 2;
+}
+
+message Child {
+  string metadata = 1;
+  bytes genome = 2;
+  bytes phenome = 3;
+}
+
+message PhenomeResponse {
+  bytes data = 1;
+}

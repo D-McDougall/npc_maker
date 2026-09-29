@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package evo;
+
+service Evolution {
+  rpc Spawn(SpawnRequest) returns (stream Individual);
+  rpc Death(Individual) returns (DeathResponse);
+}
+
+message SpawnRequest {
+}
+
+message Individual {
+  string metadata = 1;
+  bytes genome = 2;
+}
+
+message DeathResponse {
+}

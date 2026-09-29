@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package env;
+
+service Environment {
+  rpc Spawn(SpawnRequest) returns (Child);
+  rpc Mate(MateRequest) returns (Child);
+  rpc Score(ScoreRequest) returns (ScoreResponse);
+  rpc Telemetry(TelemetryRequest) returns (TelemetryResponse);
+  rpc Death(DeathRequest) returns (DeathResponse);
+}
+
+message SpawnRequest {
+  string body_type = 1;
+}
+
+message MateRequest {
+  repeated string parents = 1;
+}
+
+message Child {
+  string name = 1;
+  string body_type = 2;
+  repeated string parents = 3;
+  repeated string controller = 4;
+  bytes phenome = 5;
+}
+
+message ScoreRequest {
+  string name = 1;
+  double score = 2;
+}
+message ScoreResponse {
+}
+
+message TelemetryRequest {
+  string name = 1;
+  repeated KeyValue data = 2;
+}
+message KeyValue {
+  string key = 1;
+  string value = 2;
+}
+message TelemetryResponse {
+}
+
+message DeathRequest {
+  string name = 1;
+}
+message DeathResponse {
+}

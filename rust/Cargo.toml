@@ -2,7 +2,6 @@
     name = "npc_maker"
     version = "0.3.0"
     edition = "2024"
-    rust-version = "1.86"
     license = "MIT-0"
     description = "Evolve AIs in simulated environments"
     repository = "https://github.com/D-McDougall/npc_maker"
@@ -20,3 +19,9 @@
     serde               = { version = "1.0", features = ["derive"] }
     serde_json          = { version = "1.0", features = ["float_roundtrip"] }
     thiserror           = { version = "2.0" }
+    tonic               = "*"
+    prost               = "0.14"
+    tonic-prost         = "0.14"
+
+[build-dependencies]
+    tonic-prost-build   = "0.14"
