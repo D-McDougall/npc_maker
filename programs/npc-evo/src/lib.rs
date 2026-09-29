@@ -1,12 +1,4 @@
-//! Suite of evolutionary algorithms
-//!
-//! Features:
-//! * Many strategies for:
-//!     + Selecting individuals to spawn
-//!     + Replacing individuals on death
-//! * Persistent save files
-//! * Leaderboard
-//! * Hall of Fame
+//! Evolutionary algorithms for the NPC Maker
 
 use mate_selection::MateSelection;
 use npc_maker::indiv::Individual;
@@ -16,8 +8,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // #[error("{0}")]
-    // Subprocess(#[from] process_anywhere::Error),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
@@ -25,36 +15,29 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-// pub use npc_maker::evo::evo_grpc::{Evolution, EvolutionServer};
-
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-pub const USAGE: &'static str = r#"evo PATH [--flag VALUE]"#;
+pub const HELP: &'static str = r#"Evolutionary algorithms for the NPC Maker
 
-pub const HELP: &'static str = r#"
-Example Evolutionary Algorithms for the NPC Maker
+SERVER OPTIONS:
+    --host <ADDRESS>              Bind to host address
+    --port <PORT>                 Bind to port number
+    --listen <ADDRESS:PORT>       Bind to host and port
+    --tls-cert <PATH>             TLS certificate (unimplemented)
+    --tls-key <PATH>              TLS private key (unimplemented)
 
+EVOLUTION OPTIONS:
+    -p, --population <SIZE>       Set the population size
+    -r, --replacement <MODE>      Set the replacement mode
+    -s, --selection <SELECTION>   Set the selection method
+        --parents <COUNT>         Set the number of parents
+    -l, --leaderboard <SIZE>      Set the leaderboard size
+    -f, --hall_of_fame <SIZE>     Set the hall of fame size
 
-
-
-Argument `path` is a directory where this will save the population to.
-If path is an empty string, a temporary directory will be created.
-
-Argument `replacement` controls how new members are added once the size of
-the population reaches the population_size argument.
-
-Argument `selection` controls which individuals are allowed to mate and
-with whom.
-
-Argument `population_size` controls the total size of the mating
-population.
-
-Argument `leaderboard_size` is the number of the best scoring individuals
-to save in perpetuity. Set to zero to disable the leaderboard.
-
-Argument `hall_of_fame_size` is the number of individuals from each
-generation to induct in to the hall of fame. Set to zero to disable the
-hall of fame.
+GENERAL OPTIONS:
+    -v, --verbose                 Enable verbose output
+        --version                 Print version information
+    -h, --help                    Print this help message
 "#;
 
 /// Main program data structure
@@ -91,7 +74,7 @@ pub struct Evolution {
     verbose: bool,
 }
 
-type SelectionFn = Box<dyn MateSelection<rand::rngs::ThreadRng>>;
+type SelectionFn = Box<dyn MateSelection>;
 
 /// Controls how the population replaces individuals
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
@@ -236,7 +219,7 @@ impl Evolution {
     /// File-path for temporary directory with unique name, does not create directory
     fn mktempdir() -> PathBuf {
         let mut path = std::env::temp_dir();
-        path.push(format!("evo{:x}", rand::random_range(0..u64::MAX)));
+        path.push(format!("npc-evo-{:x}", rand::random_range(0..u64::MAX)));
         path
     }
     /// Process the first 2 arguments (program-name and save-dir)
@@ -259,7 +242,7 @@ impl Evolution {
     fn parse_flags(&mut self, args: &mut Vec<String>) -> bool {
         let mut update = false;
         while !args.is_empty() {
-            let flag = args.remove(0).to_lowercase();
+            let flag = args.remove(0);
             match flag.as_str() {
                 "-p" | "--population" => {
                     let value: usize = args.remove(0).parse().unwrap();
@@ -303,8 +286,8 @@ impl Evolution {
                     println!("{}", HELP);
                     std::process::exit(0);
                 }
-                _ => {
-                    eprintln!("{}", USAGE);
+                arg => {
+                    eprintln!("Error: unrecognized argument: {}", arg);
                     std::process::exit(1);
                 }
             }
@@ -424,13 +407,12 @@ impl Evolution {
         }
         // Refill parents buffer.
         if self.buffer.is_empty() {
-            let rng = &mut rand::rng();
             let buffer_size = match self.replacement {
                 Replacement::Generation | Replacement::Frozen => self.population_size,
                 _ => 1,
             };
             let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
-            let index = self.selection_fn.pairs(rng, buffer_size, scores);
+            let index = self.selection_fn.pairs(buffer_size, scores);
             self.buffer.reserve(index.len());
             for pair in index {
                 self.buffer.push(

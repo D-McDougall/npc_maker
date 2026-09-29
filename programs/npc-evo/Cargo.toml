@@ -12,12 +12,11 @@
     process_anywhere = "0.5"
 
 [dependencies]
-    mate_selection = "0.1.2"
+    mate_selection = "0.2"
     npc_maker = {path = "../../rust/"}
     rand = "0.10.2"
     serde = "1.0.229"
     serde_json = "1.0.151"
     thiserror = "2.0.21"
     tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
-tokio-stream = "0.1.19"
     tonic = "0.14"

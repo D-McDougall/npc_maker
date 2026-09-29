@@ -12,9 +12,3 @@ Features:
 * Persistent save files
 * Leaderboard
 * Hall of Fame
-
-
-## Installation
-
-TBD
-

@@ -13,26 +13,35 @@ service Evolution {
   This may return any number of Individuals. If the Evolution service returns
   zero individuals then use the initial genetic material.
   */
-  rpc Spawn(SpawnRequest) returns (stream Individual);
+  rpc Spawn(SpawnRequest) returns (SpawnResponse);
 
   /*
   Notify the Evolution service that an Individual has died
   */
-  rpc Death(Individual) returns (DeathResponse);
+  rpc Death(DeathRequest) returns (DeathResponse);
 }
 
 /*
-Individuals are stored in two parts:
-1) Metadata, stored in a JSON object
-2) Genome, stored in a binary blob
+Individuals are the entities that evolve
 */
 message Individual {
+  /*
+  The metadata is a JSON object. See protobuf: "individual.Individual"
+  */
   bytes metadata = 1;
   bytes genome = 2;
 }
 
 // Empty
 message SpawnRequest {
+}
+
+message SpawnResponse {
+  repeated Individual parents = 1;
+}
+
+message DeathRequest {
+  Individual individual = 1;
 }
 
 // Empty
