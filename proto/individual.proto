@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package individual;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+/*
+Metadata for an Individual
+
+Each individual is a distinct life-form with its own genome.
+
+Evolutionary algorithms operate on individuals, while genetic algorithms
+operate on genomes.
+*/
+message Individual {
+  /*
+  UUID of this individual
+  */
+  string name = 1;
+
+  /*
+  Name of the environment that this individual lives in
+  */
+  optional string environment = 2;
+
+  /*
+  Name of the body type used by this individual
+  */
+  optional string body_type = 3 [
+    json_name = "body_type"
+  ];
+
+  /*
+  Command-line invocation of the controller program
+  */
+  repeated string controller = 4;
+
+  /*
+  Reproductive fitness of this individual, as assessed by the environment
+  */
+  optional double score = 5;
+
+  /*
+  Environmental information
+  */
+  map<string, string> telemetry = 6;
+
+  /*
+  Epigenetic information
+  */
+  map<string, string> epigenome = 7;
+
+  /*
+  UUID for artificial speciation
+  */
+  optional string species = 8;
+
+  /*
+  Number of parents
+  */
+  optional uint64 parents = 9;
+
+  /*
+  Number of children
+  */
+  optional uint64 children = 10;
+
+  /*
+  Number of generations that came before this individual
+  */
+  optional uint64 generation = 11;
+
+  /*
+  Number of individuals who died before this one
+  */
+  optional uint64 ascension = 12;
+
+  /*
+  UTC time at which this individual was born
+  */
+  optional google.protobuf.Timestamp birth_date = 13 [
+    json_name = "birth_date"
+  ];
+
+  /*
+  UTC time at which this individual died
+  */
+  optional google.protobuf.Timestamp death_date = 14 [
+    json_name = "death_date"
+  ];
+
+  /*
+  User-defined fields are allowed
+  */
+  google.protobuf.Struct extra = 100;
+}

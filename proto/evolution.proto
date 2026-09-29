@@ -1,19 +1,40 @@
 syntax = "proto3";
 
-package evo;
+package evolution;
 
+/*
+The purpose of the evolution service is to maintain a population of
+individuals and to pick which individuals should reproduce.
+*/
 service Evolution {
+  /*
+  Request parents for making a new individual
+
+  This may return any number of Individuals. If the Evolution service returns
+  zero individuals then use the initial genetic material.
+  */
   rpc Spawn(SpawnRequest) returns (stream Individual);
+
+  /*
+  Notify the Evolution service that an Individual has died
+  */
   rpc Death(Individual) returns (DeathResponse);
 }
 
-message SpawnRequest {
-}
-
+/*
+Individuals are stored in two parts:
+1) Metadata, stored in a JSON object
+2) Genome, stored in a binary blob
+*/
 message Individual {
-  string metadata = 1;
+  bytes metadata = 1;
   bytes genome = 2;
 }
 
+// Empty
+message SpawnRequest {
+}
+
+// Empty
 message DeathResponse {
 }

@@ -7,6 +7,10 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
+pub mod grpc {
+    tonic::include_proto!("individual");
+}
+
 /// Generate a universally unique name. This will never return the same name twice.
 fn uuid4() -> String {
     let uuid: u128 = rand::random();

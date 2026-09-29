@@ -1,22 +1,13 @@
 //! Evolution interface, for building and using evolutionary algorithms
 
+tonic::include_proto!("evolution");
+
+/*
 use process_anywhere::{Computer, Forwarder, Process};
 use serde::Serialize;
 use std::io::{self, BufRead, StdinLock, StdoutLock, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    Subprocess(#[from] process_anywhere::Error),
-
-    #[error("{0}")]
-    Io(#[from] io::Error),
-
-    #[error("{0}")]
-    Json(#[from] serde_json::Error),
-}
 
 /// Interface for implementing evolutionary algorithms
 #[allow(unused_variables)]
@@ -181,3 +172,4 @@ impl Evolution {
         Ok(value)
     }
 }
+*/

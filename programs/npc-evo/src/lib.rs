@@ -9,11 +9,23 @@
 //! * Hall of Fame
 
 use mate_selection::MateSelection;
-use npc_maker::evo::{API, Error};
 use npc_maker::indiv::Individual;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    // #[error("{0}")]
+    // Subprocess(#[from] process_anywhere::Error),
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("{0}")]
+    Json(#[from] serde_json::Error),
+}
+
+// pub use npc_maker::evo::evo_grpc::{Evolution, EvolutionServer};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -403,11 +415,10 @@ fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
         .then_with(|| a.ascension.unwrap_or(u64::MAX).cmp(&b.ascension.unwrap_or(u64::MAX)))
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-impl API for Evolution {
-    /// Get a list of parents to be mated together to produce a child.
-    fn spawn(&mut self) -> Vec<PathBuf> {
+/// Primary API methods: spawn & death
+impl Evolution {
+    /// Get a list of parents to be mated together to produce a child
+    pub fn spawn(&mut self) -> Vec<PathBuf> {
         if self.population.is_empty() {
             return vec![];
         }
@@ -431,8 +442,8 @@ impl API for Evolution {
         }
         self.buffer.pop().unwrap()
     }
-    /// Add a new individual to this population.
-    fn death(&mut self, individual: PathBuf) {
+    /// Add a new individual to this population
+    pub fn death(&mut self, individual: PathBuf) {
         // Bookkeeping on the Individual
         let mut individual = Individual::load(individual).unwrap();
         assert!(individual.ascension.is_none());
@@ -495,18 +506,6 @@ impl API for Evolution {
         if self.waiting.len() >= self.population_size {
             self.rollover().unwrap();
         }
-    }
-    /// Receive a non-standard command
-    fn custom(&mut self, command: String, _arguments: Vec<serde_json::Value>) -> serde_json::Value {
-        match command.as_str() {
-            "rollover" => {
-                self.rollover().unwrap();
-            }
-            _ => {
-                panic!("unsupported operation: {command}");
-            }
-        }
-        Default::default()
     }
 }
 
