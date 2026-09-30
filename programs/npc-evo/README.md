@@ -1,10 +1,10 @@
-# Evolution Suite
+# Program: npc-evo
 
-The `evo` rust program provides a suite of evolutionary algorithms.
+The `npc-evo` rust program provides a suite of evolutionary algorithms.
 Its basic function is to manage a population of individuals.
 Individuals are added to the population by the "death" method,
-and the state of the population is queried by the "spawn" method
-requesting parents for mating.
+and the state of the population is queried by the "spawn" method,
+which requests parents for mating.
 
 Features:
 * Many strategies for selecting individuals to spawn

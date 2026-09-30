@@ -3,13 +3,10 @@
     version = "0.1.0"
     edition = "2024"
     license = "MIT-0"
-    description = "Example evolutionary algorithms for the NPC Maker"
+    description = "Evolutionary algorithms for the NPC Maker"
     repository = "https://github.com/D-McDougall/npc_maker"
     categories = ["science"]
     keywords = ["ai", "alife", "evolution", "npc_maker"]
-
-[dev-dependencies]
-    process_anywhere = "0.5"
 
 [dependencies]
     mate_selection = "0.2"
