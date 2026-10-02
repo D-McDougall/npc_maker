@@ -1,11 +1,7 @@
 //! Data structure and persistence for an individual life-form.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::ffi::OsString;
-use std::io::{BufRead, BufReader, BufWriter, Error, Read, Result, Write};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::io::{Result, Write};
+use std::path::Path;
 use std::{fs, fs::File};
 
 tonic::include_proto!("individual");
@@ -19,7 +15,7 @@ fn uuid4() -> String {
 
 impl Individual {
     /// Create a new individual. This is used to initialize new populations
-    pub fn new(environment: &str, body_type: &str, controller: &[&str], genome: Box<[u8]>) -> Individual {
+    pub fn new(_environment: &str, _body_type: &str, _controller: &[&str], _genome: Box<[u8]>) -> Individual {
         todo!()
         // assert!(!controller.is_empty());
         // assert!(!genome.is_empty());
@@ -32,7 +28,7 @@ impl Individual {
     }
 
     ///
-    pub fn reproduce(&mut self, child_genome: &[u8]) -> Individual {
+    pub fn reproduce(&mut self, _child_genome: &[u8]) -> Individual {
         todo!()
         // assert!(!child_genome.is_empty());
         // let individual = Individual {
@@ -138,7 +134,7 @@ impl Individual {
     /// Non-directory entries are ignored. If any subdirectory cannot be
     /// loaded as an individual, the method returns the corresponding error.
     pub fn load_dir(path: impl AsRef<Path>) -> Result<Vec<Metadata>> {
-        let mut directories = fs::read_dir(path)?
+        let directories = fs::read_dir(path)?
             .filter_map(|entry| match entry {
                 Ok(entry) => match entry.file_type() {
                     Ok(file_type) if file_type.is_dir() => Some(Ok(entry.path())),

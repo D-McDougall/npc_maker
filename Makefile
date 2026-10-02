@@ -26,7 +26,7 @@ python:
 		--grpc_python_out=$(PYTHON_OUT) \
 		$(PROTO_FILES)
 	# Fixup generated files: make absolute import statement into relative
-	@for f in $(PYTHON_OUT)/*_pb2_grpc.py; do \
+	@for f in $(PYTHON_OUT)/*_pb2.py $(PYTHON_OUT)/*_pb2_grpc.py; do \
 		sed -i.bak -E \
 			's/^import ([a-zA-Z0-9_]+)_pb2 as ([a-zA-Z0-9_]+)$$/from . import \1_pb2 as \2/' \
 			"$$f"; \
