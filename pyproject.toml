@@ -26,10 +26,10 @@
     Repository = "https://github.com/D-McDougall/npc_maker"
 
 [project.scripts]
-    "npc-maker.py" = "npc_maker.programs.npc_maker:main"
-    npc-player     = "npc_maker.programs.npc_player:main"
-    npc-evo        = "npc_maker.programs._launcher:npc_evo"
-    npc-maker      = "npc_maker.programs._launcher:npc_maker"
+    "npc-server.py" = "npc_maker.programs.npc_server:main"
+    npc-player      = "npc_maker.programs.npc_player:main"
+    npc-evo         = "npc_maker.programs._launcher:npc_evo"
+    npc-server      = "npc_maker.programs._launcher:npc_server"
 
 [tool.setuptools.packages.find]
     where = ["python"]

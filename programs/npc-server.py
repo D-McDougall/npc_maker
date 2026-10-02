@@ -14,7 +14,7 @@ import argparse
 import time
 
 def main():
-    parser = argparse.ArgumentParser(prog='npc-maker.py', description=__doc__)
+    parser = argparse.ArgumentParser(prog='npc-server.py', description=__doc__)
     parser.add_argument('filename', help='experiment file (.exp)')
     args = parser.parse_args()
 
