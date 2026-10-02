@@ -41,8 +41,8 @@ package: python rust
 	cp -p target/release/npc-evo        python/npc_maker/programs/
 	cp -p target/release/npc-server     python/npc_maker/programs/
 	# Replace dash with underscore in file name
-	cp -p programs/npc-server.py        python/npc_maker/programs/npc_server.py
-	cp -p programs/npc-player.py        python/npc_maker/programs/npc_player.py
+	cp -p programs/npc-server/npc-server.py     python/npc_maker/programs/npc_server.py
+	cp -p programs/npc-player.py        		python/npc_maker/programs/npc_player.py
 	# Build the python distributable
 	python -m build --wheel
 	python -m twine check dist/npc_maker-*.whl
