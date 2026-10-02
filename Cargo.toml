@@ -1,3 +1,3 @@
 [workspace]
     resolver = "3"
-    members = ["rust", "programs/npc-evo", "programs/npc-maker"]
+    members = ["rust", "programs/npc-evo", "programs/npc-server"]
