@@ -1,5 +1,5 @@
 use npc_maker::evolution::{
-    DeathRequest, DeathResponse, Individual, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer,
+    DeathRequest, DeathResponse, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer,
 };
 use std::path::PathBuf;
 use std::sync::Mutex;

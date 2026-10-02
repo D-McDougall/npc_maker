@@ -61,6 +61,9 @@ impl Individual {
     pub fn score(&self) -> Option<f64> {
         self.metadata.as_ref().unwrap().score.clone()
     }
+    pub fn ascension(&self) -> Option<u64> {
+        self.metadata.as_ref()?.ascension.clone()
+    }
 
     /// Save an individual to file.
     ///
@@ -134,7 +137,7 @@ impl Individual {
     ///
     /// Non-directory entries are ignored. If any subdirectory cannot be
     /// loaded as an individual, the method returns the corresponding error.
-    pub fn load_dir(path: impl AsRef<Path>) -> Result<Vec<Individual>> {
+    pub fn load_dir(path: impl AsRef<Path>) -> Result<Vec<Metadata>> {
         let mut directories = fs::read_dir(path)?
             .filter_map(|entry| match entry {
                 Ok(entry) => match entry.file_type() {
@@ -146,9 +149,13 @@ impl Individual {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        directories.sort();
-
-        directories.iter().map(Self::load).collect()
+        // Read the metadata for each individual
+        let mut retval = Vec::with_capacity(directories.len());
+        for path in directories {
+            let metadata_file = File::open(path.join("metadata.json"))?;
+            retval.push(serde_json::from_reader(metadata_file)?);
+        }
+        Ok(retval)
     }
 
     /// Remove this individual's data directory
@@ -167,6 +174,13 @@ impl Individual {
         fs::remove_file(path.join("phenome"))?;
         fs::remove_dir(path)?;
         Ok(())
+    }
+}
+
+impl Metadata {
+    /// Remove this individual's data directory
+    pub fn delete(self, path: impl AsRef<Path>) -> Result<()> {
+        Individual::delete(path.as_ref().join(&self.name))
     }
 }
 

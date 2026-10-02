@@ -2,7 +2,7 @@
 
 use mate_selection::MateSelection;
 use npc_maker::evolution::DeathRequest;
-use npc_maker::individual::Individual;
+use npc_maker::individual::{Individual, Metadata};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -64,13 +64,13 @@ pub struct Evolution {
 
     generation: u64,
 
-    population: Vec<Individual>,
+    population: Vec<Metadata>,
 
-    waiting: Vec<Individual>,
+    waiting: Vec<Metadata>,
 
-    leaderboard: Vec<Individual>,
+    leaderboard: Vec<Metadata>,
 
-    buffer: Vec<Vec<PathBuf>>,
+    buffer: Vec<Vec<String>>,
 
     verbose: bool,
 }
@@ -101,7 +101,7 @@ pub enum Replacement {
 
 /// Persistent storage for parameters and program state
 #[derive(Serialize, Deserialize)]
-struct Metadata {
+struct PersistentData {
     selection: String,
     replacement: Replacement,
     num_parents: usize,
@@ -310,7 +310,7 @@ impl Evolution {
     }
     /// Write metadata file
     fn save(&self) -> Result<(), Error> {
-        let metadata = Metadata {
+        let metadata = PersistentData {
             selection: self.get_selection(),
             num_parents: self.get_parents(),
             replacement: self.get_replacement(),
@@ -332,7 +332,7 @@ impl Evolution {
     fn load(&mut self, path: PathBuf) -> Result<(), Error> {
         self.path = path;
         let json = fs::read(&self.get_metadata_path())?;
-        let metadata: Metadata = serde_json::from_slice(&json)?;
+        let metadata: PersistentData = serde_json::from_slice(&json)?;
         self.replacement = metadata.replacement;
         self.selection = metadata.selection;
         self.selection_fn = mate_selection::parse(&self.selection).unwrap();
@@ -367,19 +367,18 @@ impl Replacement {
 }
 
 // Utility functions dealing with scores
-fn score_fn(individual: &Individual) -> f64 {
-    let Some(score) = individual.score() else {
-        return f64::NEG_INFINITY;
-    };
-    score
+fn score_fn(metadata: &Metadata) -> (f64, u64) {
+    let score = metadata.score.unwrap_or(f64::NEG_INFINITY);
+    let ascension = metadata.ascension.unwrap_or(u64::MAX);
+    (score, ascension)
 }
-fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
-    let a_score = a.score().unwrap_or(f64::NAN);
-    let b_score = b.score().unwrap_or(f64::NAN);
+fn compare_scores(a: &Metadata, b: &Metadata) -> std::cmp::Ordering {
+    let (a_score, a_ascension) = score_fn(a);
+    let (b_score, b_ascension) = score_fn(b);
     a_score
         .total_cmp(&b_score)
         .reverse()
-        .then_with(|| a.ascension.unwrap_or(u64::MAX).cmp(&b.ascension.unwrap_or(u64::MAX)))
+        .then_with(|| a_ascension.cmp(&b_ascension))
 }
 
 /// Primary API methods: spawn & death
@@ -395,27 +394,33 @@ impl Evolution {
                 Replacement::Generation | Replacement::Frozen => self.population_size,
                 _ => 1,
             };
-            let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
+            let scores: Vec<f64> = self.population.iter().map(|i| score_fn(i).0).collect();
             let index = self.selection_fn.pairs(buffer_size, scores).unwrap();
             self.buffer.reserve(index.len());
             for pair in index {
-                self.buffer.push(
-                    pair.iter()
-                        .map(|&idx| self.population[idx].path.as_ref().unwrap().clone())
-                        .collect(),
-                );
+                self.buffer
+                    .push(pair.iter().map(|&idx| self.population[idx].name.clone()).collect());
             }
         }
-        self.buffer.pop().unwrap()
+        // Load the parents
+        let mut parents = vec![];
+        for name in self.buffer.pop().unwrap() {
+            let path = self.get_population_path().join(name);
+            parents.push(Individual::load(path).unwrap());
+        }
+        parents
     }
     /// Add a new individual to this population
     pub fn death(&mut self, request: DeathRequest) {
         // Bookkeeping on the Individual
-        let individual = request.individual;
-        let mut individual = Individual::load(individual).unwrap();
-        assert!(individual.ascension.is_none());
-        individual.ascension = Some(self.ascension);
-        self.ascension += 1;
+        let mut individual = request.individual.unwrap();
+        {
+            let metadata = individual.metadata.as_mut().unwrap();
+            assert!(metadata.ascension.is_none());
+            metadata.ascension = Some(self.ascension);
+            self.ascension += 1;
+        }
+        let metadata = individual.metadata.as_ref().unwrap(); // Reborrow as immutable
         // Steady-state replacement: put individual directly into the population
         match self.replacement {
             Replacement::Frozen => {
@@ -424,7 +429,7 @@ impl Evolution {
             Replacement::Growth => {
                 // Add the individual to the population
                 individual.save(self.get_population_path()).unwrap();
-                self.population.push(individual.clone());
+                self.population.push(metadata.clone());
             }
             Replacement::Generation => {
                 // Action defered until next rollover event
@@ -433,10 +438,10 @@ impl Evolution {
                 while !self.population.is_empty() && self.population.len() >= self.population_size {
                     let index = rand::random_range(0..self.population.len());
                     let random_individual = self.population.swap_remove(index);
-                    random_individual.delete().unwrap();
+                    random_individual.delete(self.get_population_path()).unwrap();
                 }
                 individual.save(self.get_population_path()).unwrap();
-                self.population.push(individual.clone());
+                self.population.push(metadata.clone());
             }
             Replacement::Worst => {
                 while !self.population.is_empty() && self.population.len() >= self.population_size {
@@ -447,10 +452,10 @@ impl Evolution {
                         .min_by(|a, b| a.1.score.unwrap().total_cmp(&b.1.score.unwrap()))
                         .unwrap();
                     let worst_individual = self.population.swap_remove(worst_index);
-                    worst_individual.delete().unwrap();
+                    worst_individual.delete(self.get_population_path()).unwrap();
                 }
                 individual.save(self.get_population_path()).unwrap();
-                self.population.push(individual.clone());
+                self.population.push(metadata.clone());
             }
             Replacement::Oldest => {
                 while !self.population.is_empty() && self.population.len() >= self.population_size {
@@ -461,15 +466,15 @@ impl Evolution {
                         .min_by_key(|(_index, individual)| individual.ascension)
                         .unwrap();
                     let oldest_individual = self.population.swap_remove(oldest_index);
-                    oldest_individual.delete().unwrap();
+                    oldest_individual.delete(self.get_population_path()).unwrap();
                 }
                 individual.save(self.get_population_path()).unwrap();
-                self.population.push(individual.clone());
+                self.population.push(metadata.clone());
             }
         }
         // Always save to waiting directory for bookkeeping
         individual.save(&self.get_waiting_path()).unwrap();
-        self.waiting.push(individual);
+        self.waiting.push(metadata.clone());
         if self.waiting.len() >= self.population_size {
             self.rollover().unwrap();
         }
@@ -539,8 +544,9 @@ impl Evolution {
         // Copy the winners into the hall of fame directory
         let hall_of_fame_path = self.get_hall_of_fame_path();
         for individual in winners.iter() {
-            let new_path = hall_of_fame_path.join(individual.file_name());
-            std::fs::copy(individual.path.as_ref().unwrap(), new_path)?;
+            // let new_path = hall_of_fame_path.join(individual.file_name());
+            // std::fs::copy(individual.path.as_ref().unwrap(), new_path)?;
+            todo!();
         }
         Ok(())
     }
@@ -549,22 +555,22 @@ impl Evolution {
         if matches!(self.replacement, Replacement::Generation) {
             // Discard the current generation
             for individual in self.population.drain(..) {
-                individual.delete()?;
+                // individual.delete(self.get_population_path())?;
             }
             // Move the waiting list files into the population directory
             let population_path = self.get_population_path();
             for individual in &mut self.waiting {
-                let old_path = individual.path.as_ref().unwrap();
-                let new_path = population_path.join(individual.file_name());
-                std::fs::rename(&old_path, &new_path)?;
-                individual.path = Some(new_path); // Update the Individual's bookkeeping
+                // let old_path = individual.path.as_ref().unwrap();
+                // let new_path = population_path.join(individual.file_name());
+                // std::fs::rename(&old_path, &new_path)?;
+                // individual.path = Some(new_path); // Update the Individual's bookkeeping
             }
             // Move the waiting list into the population
             self.population = std::mem::take(&mut self.waiting);
         } else {
             // Clear the waiting list
             for individual in self.waiting.drain(..) {
-                individual.delete()?;
+                // individual.delete(self.get_waiting_path())?;
             }
         }
         Ok(())
