@@ -15,9 +15,15 @@ message SpawnRequest {
 }
 
 message MateRequest {
+  /*
+  Argument parents is a list of individual's names.
+  */
   repeated string parents = 1;
 }
 
+/*
+Child represents a new individual entering the environment.
+*/
 message Child {
   string name = 1;
   string body_type = 2;
@@ -30,6 +36,8 @@ message ScoreRequest {
   string name = 1;
   double score = 2;
 }
+
+// Empty
 message ScoreResponse {
 }
 
@@ -37,15 +45,23 @@ message TelemetryRequest {
   string name = 1;
   repeated KeyValue data = 2;
 }
+
 message KeyValue {
   string key = 1;
   string value = 2;
 }
+
+// Empty
 message TelemetryResponse {
 }
 
+/*
+Notifies the evolutionary algorithm that an individual has exited the environment.
+*/
 message DeathRequest {
   string name = 1;
 }
+
+// Empty
 message DeathResponse {
 }

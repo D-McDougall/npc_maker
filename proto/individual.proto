@@ -17,12 +17,16 @@ message Individual {
   /*
   UUID of this individual
   */
-  string name = 1;
+  string name = 1 [
+    json_name = "name"
+  ];
 
   /*
   Name of the environment that this individual lives in
   */
-  optional string environment = 2;
+  optional string environment = 2 [
+    json_name = "environment"
+  ];
 
   /*
   Name of the body type used by this individual
@@ -34,64 +38,77 @@ message Individual {
   /*
   Command-line invocation of the controller program
   */
-  repeated string controller = 4;
+  repeated string controller = 4 [
+    json_name = "controller"
+  ];
 
   /*
   Reproductive fitness of this individual, as assessed by the environment
   */
-  optional double score = 5;
+  optional double score = 5 [
+    json_name = "score"
+  ];
 
   /*
   Environmental information
   */
-  map<string, string> telemetry = 6;
-
-  /*
-  Epigenetic information
-  */
-  map<string, string> epigenome = 7;
+  map<string, string> telemetry = 6 [
+    json_name = "telemetry"
+  ];
 
   /*
   UUID for artificial speciation
   */
-  optional string species = 8;
+  optional string species = 7 [
+    json_name = "species"
+  ];
 
   /*
   Number of parents
   */
-  optional uint64 parents = 9;
+  optional uint64 parents = 8 [
+    json_name = "parents"
+  ];
 
   /*
   Number of children
   */
-  optional uint64 children = 10;
+  optional uint64 children = 9 [
+    json_name = "children"
+  ];
 
   /*
   Number of generations that came before this individual
   */
-  optional uint64 generation = 11;
+  optional uint64 generation = 10 [
+    json_name = "generation"
+  ];
 
   /*
   Number of individuals who died before this one
   */
-  optional uint64 ascension = 12;
+  optional uint64 ascension = 11 [
+    json_name = "ascension"
+  ];
 
   /*
   UTC time at which this individual was born
   */
-  optional google.protobuf.Timestamp birth_date = 13 [
+  optional google.protobuf.Timestamp birth_date = 12 [
     json_name = "birth_date"
   ];
 
   /*
   UTC time at which this individual died
   */
-  optional google.protobuf.Timestamp death_date = 14 [
+  optional google.protobuf.Timestamp death_date = 13 [
     json_name = "death_date"
   ];
 
   /*
   User-defined fields are allowed
   */
-  google.protobuf.Struct extra = 100;
+  google.protobuf.Struct extra = 100 [
+    json_name = "extra"
+  ];
 }

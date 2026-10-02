@@ -2,9 +2,15 @@ PROTO_DIR  	:= proto
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PYTHON_OUT 	:= python/npc_maker/_protobuf
 
-.PHONY: all generate python rust clean
+.PHONY: all venv python rust package install clean
 
 all: python rust package
+
+venv:
+	test -d venv || python3 -m venv venv # Create venv if it doesn't exist
+	(. venv/bin/activate)
+	pip install -r requirements.txt
+	pip install build twine
 
 python:
 	# Setup python module for protobuf generated file
@@ -12,6 +18,7 @@ python:
 	touch $(PYTHON_OUT)/__init__.py
 	echo "*" > $(PYTHON_OUT)/.gitignore
 	# Run protobuf
+	(. venv/bin/activate)
 	python -m grpc_tools.protoc \
 		-I$(PROTO_DIR) \
 		--python_out=$(PYTHON_OUT) \
@@ -28,18 +35,25 @@ python:
 rust:
 	cargo build --release
 
-package:
+package: python rust
 	# Copy programs into python release
 	cp -p target/release/npc-evo        python/npc_maker/programs/
 	cp -p target/release/npc-maker      python/npc_maker/programs/
 	cp -p programs/npc-maker.py         python/npc_maker/programs/npc_maker.py
 	cp -p programs/npc-player.py        python/npc_maker/programs/npc_player.py
 	# Build the python distributable
+	(. venv/bin/activate)
 	python -m build --wheel
 	python -m twine check dist/npc_maker-*.whl
 
+install: package
+	(. venv/bin/activate)
+	pip install --force-reinstall dist/npc_maker-*.whl
+
 clean:
-	rm -rf build/ dist/ python/npc_maker.egg-info/ # Python build artifacts
 	rm -rf $(PYTHON_OUT) 	  # protobuf
 	rm -rf rust/src/generated # protobuf
-	cargo clean
+	rm -rf build # python
+	rm -rf dist  # python
+	rm  -rf python/npc_maker.egg-info # python
+	cargo clean # rust

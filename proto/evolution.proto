@@ -30,6 +30,8 @@ message Individual {
   */
   bytes metadata = 1;
   bytes genome = 2;
+  bytes epigenome = 3;
+  bytes phenome = 4;
 }
 
 // Empty

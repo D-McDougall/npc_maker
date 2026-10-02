@@ -45,7 +45,7 @@ GENERAL OPTIONS:
 pub struct Evolution {
     path: PathBuf,
 
-    selection: Vec<String>,
+    selection: String,
 
     selection_fn: SelectionFn,
 
@@ -101,7 +101,7 @@ pub enum Replacement {
 /// Persistent storage for parameters and program state
 #[derive(Serialize, Deserialize)]
 struct Metadata {
-    selection: Vec<String>,
+    selection: String,
     replacement: Replacement,
     num_parents: usize,
     population_size: usize,
@@ -137,7 +137,7 @@ impl Evolution {
         self.path.join("hall_of_fame")
     }
     /// Get the `selection` argument
-    pub fn get_selection(&self) -> Vec<String> {
+    pub fn get_selection(&self) -> String {
         self.selection.clone()
     }
     /// Get the `parents` argument
@@ -198,11 +198,12 @@ impl Evolution {
         Ok(this)
     }
     fn default() -> Self {
+        let selection = "percentile=0.80".to_string();
         Self {
             path: PathBuf::new(),
             replacement: Replacement::Generation,
-            selection: vec!["exponential".to_string(), "10".to_string()],
-            selection_fn: Box::new(mate_selection::RankedExponential(10)),
+            selection_fn: mate_selection::parse(&selection).unwrap(),
+            selection,
             num_parents: 2,
             population_size: 100,
             leaderboard_size: 10,
@@ -250,7 +251,8 @@ impl Evolution {
                     self.population_size = value;
                 }
                 "-s" | "--selection" => {
-                    let (selection, selection_fn) = parse_selection(args);
+                    let selection = args.remove(0);
+                    let selection_fn = mate_selection::parse(&selection).unwrap();
                     update = selection != self.selection;
                     self.selection = selection;
                     self.selection_fn = selection_fn;
@@ -329,9 +331,10 @@ impl Evolution {
     fn load(&mut self, path: PathBuf) -> Result<(), Error> {
         self.path = path;
         let json = fs::read(&self.get_metadata_path())?;
-        let mut metadata: Metadata = serde_json::from_slice(&json)?;
+        let metadata: Metadata = serde_json::from_slice(&json)?;
         self.replacement = metadata.replacement;
-        (self.selection, self.selection_fn) = parse_selection(&mut std::mem::take(&mut metadata.selection));
+        self.selection = metadata.selection;
+        self.selection_fn = mate_selection::parse(&self.selection).unwrap();
         self.num_parents = metadata.num_parents;
         self.population_size = metadata.population_size;
         self.leaderboard_size = metadata.leaderboard_size;
@@ -345,26 +348,6 @@ impl Evolution {
         // todo!();
         Ok(())
     }
-}
-pub fn parse_selection(args: &mut Vec<String>) -> (Vec<String>, SelectionFn) {
-    let mut selection = vec![args.remove(0).to_lowercase()];
-    let selection_fn: SelectionFn = match selection[0].as_str() {
-        "best" => {
-            selection.push(args.remove(0));
-            Box::new(mate_selection::Best(selection[1].parse().unwrap()))
-        }
-        "normal" => todo!(),
-        "percent" => todo!(),
-        "score" => todo!(),
-        "random" => todo!(),
-        "ranked" => todo!(),
-        "exponential" => {
-            selection.push(args.remove(0));
-            Box::new(mate_selection::RankedExponential(selection[1].parse().unwrap()))
-        }
-        arg0 => panic!("unexpected selection type, expected on of ... found {}", arg0),
-    };
-    (selection, selection_fn)
 }
 impl Replacement {
     pub fn parse(args: &mut Vec<String>) -> Replacement {
@@ -412,7 +395,7 @@ impl Evolution {
                 _ => 1,
             };
             let scores: Vec<f64> = self.population.iter().map(score_fn).collect();
-            let index = self.selection_fn.pairs(buffer_size, scores);
+            let index = self.selection_fn.pairs(buffer_size, scores).unwrap();
             self.buffer.reserve(index.len());
             for pair in index {
                 self.buffer.push(

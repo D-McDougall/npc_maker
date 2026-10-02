@@ -1,4 +1,4 @@
-use npc_maker::evo::{
+use npc_maker::evolution::{
     DeathRequest, DeathResponse, Individual, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer,
 };
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ macro_rules! exit_error {
 }
 
 #[tonic::async_trait]
-impl npc_maker::evo::evolution_server::Evolution for EvolutionServerImpl {
+impl npc_maker::evolution::evolution_server::Evolution for EvolutionServerImpl {
     async fn spawn(&self, _request: Request<SpawnRequest>) -> TonicResult<SpawnResponse> {
         let parents = self.0.lock().unwrap().spawn();
         // Load parents into individual objects

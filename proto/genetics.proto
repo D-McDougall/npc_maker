@@ -1,23 +1,45 @@
 syntax = "proto3";
 
-package gen;
+package genetics;
 
+/*
+
+The word "**genome**" refers to a complete
+set of parameters for creating an AI agent's control system. Each individual
+has exactly one immutable genome
+
+Genomes are treated as opaque binary objects outside of genetic algorithms.
+Genomes are converted into "**phenomes**" before transmission to controllers.
+This decouples the genetic representation from the control system implementation.
+
+*/
 service Genetics {
-  rpc Reproduce(stream Individual) returns (Child);
-  rpc Phenome(Individual) returns (PhenomeResponse);
+  /*
+  */
+  rpc Reproduce(Parents) returns (Child);
 }
 
+/*
+*/
+message Parents {
+  repeated Individual parents = 1;
+}
+
+/*
+*/
 message Individual {
+  /*
+  The metadata may contain epigenetic data
+  */
   string metadata = 1;
   bytes genome = 2;
 }
 
+/*
+
+*/
 message Child {
-  string metadata = 1;
+  repeated string controller = 1;
   bytes genome = 2;
   bytes phenome = 3;
-}
-
-message PhenomeResponse {
-  bytes data = 1;
 }

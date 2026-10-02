@@ -12,27 +12,6 @@ import os.path
 import tempfile
 import threading
 
-def _copy_file(src_file, dst_dir):
-    """
-    Returns the destination file path.
-    """
-    src_file = Path(src_file)
-    dst_dir = Path(dst_dir)
-    assert src_file.is_file()
-    assert dst_dir.is_dir()
-    dst_file = dst_dir.joinpath(src_file.name)
-    # 
-    with open(src_file, 'rb') as src:
-        data = src.read()
-    # Write to temp file and atomic move into place.
-    fd, tmp_path = tempfile.mkstemp()
-    file = os.fdopen(fd, "wb")
-    file.write(data)
-    file.flush()
-    file.close()
-    Path(tmp_path).rename(dst_file)
-    return dst_file
-
 def _scan_dir(path):
     """
     Find saved individuals in the given directory.
@@ -42,7 +21,7 @@ def _scan_dir(path):
         if file.suffix.lower() == ".indiv":
             yield file
 
-class Replayer(API):
+class Player(API):
     """
     Replay saved individuals
     """
@@ -96,3 +75,32 @@ class Replayer(API):
                         for individual in self._members]
         self._buffer = []
         self._scan_time = os.path.getmtime(self._path)
+
+
+
+from concurrent import futures
+import logging
+
+import grpc
+import helloworld_pb2
+import helloworld_pb2_grpc
+
+
+class Greeter(helloworld_pb2_grpc.GreeterServicer):
+    def SayHello(self, request, context):
+        return helloworld_pb2.HelloReply(message="Hello, %s!" % request.name)
+
+
+def serve():
+    port = "50051"
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    helloworld_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
+    server.add_insecure_port("[::]:" + port)
+    server.start()
+    print("Server started, listening on " + port)
+    server.wait_for_termination()
+
+
+if __name__ == "__main__":
+    logging.basicConfig()
+    serve()

@@ -6,8 +6,15 @@
 
 pub mod ctrl;
 pub mod env;
-pub mod evo;
 pub mod indiv;
+
+pub mod evolution {
+    tonic::include_proto!("evolution");
+}
+
+pub mod genetics {
+    tonic::include_proto!("genetics");
+}
 
 fn read_bytes(reader: &mut impl std::io::BufRead, len: usize) -> std::io::Result<Box<[u8]>> {
     use std::mem::{MaybeUninit, transmute};
