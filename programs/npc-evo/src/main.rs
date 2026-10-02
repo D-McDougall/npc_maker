@@ -22,13 +22,10 @@ macro_rules! exit_error {
 impl npc_maker::evolution::evolution_server::Evolution for EvolutionServerImpl {
     async fn spawn(&self, _request: Request<SpawnRequest>) -> TonicResult<SpawnResponse> {
         let parents = self.0.lock().unwrap().spawn();
-        // Load parents into individual objects
-        let parents: Vec<Individual> = todo!();
         Ok(Response::new(SpawnResponse { parents }))
     }
     async fn death(&self, request: Request<DeathRequest>) -> TonicResult<DeathResponse> {
-        let individual = todo!();
-        self.0.lock().unwrap().death(individual);
+        self.0.lock().unwrap().death(request.into_inner());
         Ok(Response::new(DeathResponse {}))
     }
 }

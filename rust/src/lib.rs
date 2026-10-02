@@ -6,7 +6,7 @@
 
 pub mod ctrl;
 pub mod env;
-pub mod indiv;
+pub mod individual;
 
 pub mod evolution {
     tonic::include_proto!("evolution");

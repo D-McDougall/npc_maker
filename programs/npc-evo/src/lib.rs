@@ -1,7 +1,8 @@
 //! Evolutionary algorithms for the NPC Maker
 
 use mate_selection::MateSelection;
-use npc_maker::indiv::Individual;
+use npc_maker::evolution::DeathRequest;
+use npc_maker::individual::Individual;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -367,14 +368,14 @@ impl Replacement {
 
 // Utility functions dealing with scores
 fn score_fn(individual: &Individual) -> f64 {
-    let Some(score) = individual.score.as_ref() else {
+    let Some(score) = individual.score() else {
         return f64::NEG_INFINITY;
     };
-    *score
+    score
 }
 fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
-    let a_score = a.score.unwrap_or(f64::NAN);
-    let b_score = b.score.unwrap_or(f64::NAN);
+    let a_score = a.score().unwrap_or(f64::NAN);
+    let b_score = b.score().unwrap_or(f64::NAN);
     a_score
         .total_cmp(&b_score)
         .reverse()
@@ -384,7 +385,7 @@ fn compare_scores(a: &Individual, b: &Individual) -> std::cmp::Ordering {
 /// Primary API methods: spawn & death
 impl Evolution {
     /// Get a list of parents to be mated together to produce a child
-    pub fn spawn(&mut self) -> Vec<PathBuf> {
+    pub fn spawn(&mut self) -> Vec<Individual> {
         if self.population.is_empty() {
             return vec![];
         }
@@ -408,8 +409,9 @@ impl Evolution {
         self.buffer.pop().unwrap()
     }
     /// Add a new individual to this population
-    pub fn death(&mut self, individual: PathBuf) {
+    pub fn death(&mut self, request: DeathRequest) {
         // Bookkeeping on the Individual
+        let individual = request.individual;
         let mut individual = Individual::load(individual).unwrap();
         assert!(individual.ascension.is_none());
         individual.ascension = Some(self.ascension);

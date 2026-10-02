@@ -1,6 +1,6 @@
 //! Environment Interface, for making and using environments
 
-use crate::indiv;
+use crate::individual;
 use process_anywhere::{Computer, Process};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -329,7 +329,7 @@ pub struct Environment {
     env_spec: Arc<EnvironmentSpec>,
     mode: Mode,
     process: Box<Process>,
-    outstanding: HashMap<String, Box<indiv::Individual>>,
+    outstanding: HashMap<String, Box<individual::Individual>>,
     stderr: Box<dyn Write>,
 }
 
@@ -391,12 +391,12 @@ impl Environment {
 
     /// Get all individuals who are currently alive in this environment.
     /// Returns a dictionary indexed by individuals names.
-    pub fn get_outstanding(&self) -> &HashMap<String, Box<indiv::Individual>> {
+    pub fn get_outstanding(&self) -> &HashMap<String, Box<individual::Individual>> {
         &self.outstanding
     }
 
     /// Get a mutable reference to a specific outstanding individual.
-    pub fn get_outstanding_mut(&mut self, name: &str) -> Option<&mut indiv::Individual> {
+    pub fn get_outstanding_mut(&mut self, name: &str) -> Option<&mut individual::Individual> {
         self.outstanding.get_mut(name).map(Box::as_mut)
     }
 
@@ -411,31 +411,32 @@ impl Environment {
     /// Argument individual is moved to the list of outstanding individuals.
     ///
     /// Argument phenome is sent to the controller in place of the individual's genome.
-    pub fn birth(&mut self, mut individual: indiv::Individual, phenome: &[u8]) {
-        #[derive(Serialize)]
-        struct Metadata<'a> {
-            name: &'a str,
-            body_type: &'a str,
-            parents: &'a [String],
-            controller: &'a [String],
-            genome: usize,
-        }
-        let metadata = Metadata {
-            name: &individual.name,
-            body_type: &individual.body_type,
-            parents: &individual.parents,
-            controller: &individual.controller,
-            genome: phenome.len(),
-        };
-        let mut message = serde_json::to_vec(&metadata).unwrap();
-        message.push(b'\n');
-        message.extend_from_slice(phenome);
-        self.process.send_bytes(&message).unwrap();
-        individual.birth_date = timestamp();
-        let name_conflict = self
-            .outstanding
-            .insert(individual.name.to_string(), Box::new(individual));
-        debug_assert!(name_conflict.is_none());
+    pub fn birth(&mut self, mut individual: individual::Individual, phenome: &[u8]) {
+        todo!()
+        // #[derive(Serialize)]
+        // struct Metadata<'a> {
+        //     name: &'a str,
+        //     body_type: &'a str,
+        //     parents: &'a [String],
+        //     controller: &'a [String],
+        //     genome: usize,
+        // }
+        // let metadata = Metadata {
+        //     name: &individual.name,
+        //     body_type: &individual.body_type.unwrap(),
+        //     parents: &individual.parents.unwrap(),
+        //     controller: &individual.controller.unwrap(),
+        //     genome: phenome.len(),
+        // };
+        // let mut message = serde_json::to_vec(&metadata).unwrap();
+        // message.push(b'\n');
+        // message.extend_from_slice(phenome);
+        // self.process.send_bytes(&message).unwrap();
+        // individual.birth_date = timestamp();
+        // let name_conflict = self
+        //     .outstanding
+        //     .insert(individual.name.to_string(), Box::new(individual));
+        // debug_assert!(name_conflict.is_none());
     }
 
     /// Check for messages from the environment program.
@@ -487,21 +488,24 @@ impl Environment {
         // Process the message if able.
         match message {
             JsonMessage::Score { name, value } => {
-                let individual = self.outstanding.get_mut(&name).unwrap();
-                individual.score = Some(value.parse().unwrap());
-                Ok(None) // consume the message
+                // let individual = self.outstanding.get_mut(&name).unwrap();
+                // individual.metadata.unwrap().score = Some(value.parse().unwrap());
+                // Ok(None) // consume the message
+                todo!()
             }
             JsonMessage::Telemetry { name, mut info } => {
-                let individual = self.outstanding.get_mut(&name).unwrap();
-                for (k, v) in info.drain() {
-                    individual.telemetry.insert(k, v);
-                }
-                Ok(None) // consume the message
+                // let individual = self.outstanding.get_mut(&name).unwrap();
+                // for (k, v) in info.drain() {
+                //     individual.metadata.unwrap().telemetry.insert(k, v);
+                // }
+                // Ok(None) // consume the message
+                todo!()
             }
             JsonMessage::Death { name } => {
-                let mut individual = self.outstanding.remove(&name).unwrap();
-                individual.death_date = timestamp();
-                Ok(Some(Message::Death { individual }))
+                // let mut individual = self.outstanding.remove(&name).unwrap();
+                // individual.metadata.unwrap().death_date = timestamp();
+                // Ok(Some(Message::Death { individual }))
+                todo!()
             }
             // Pass other messages through to user.
             JsonMessage::Spawn { body_type } => Ok(Some(Message::Spawn { body_type })),
@@ -528,7 +532,7 @@ pub enum Message {
     Mate { parents: [String; 2] },
 
     /// Report the death of an individual.
-    Death { individual: Box<indiv::Individual> },
+    Death { individual: Box<individual::Individual> },
 }
 
 #[cfg(test)]

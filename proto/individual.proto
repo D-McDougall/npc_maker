@@ -6,14 +6,25 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 /*
-Metadata for an Individual
+Individuals are the entities that evolve
 
-Each individual is a distinct life-form with its own genome.
-
-Evolutionary algorithms operate on individuals, while genetic algorithms
-operate on genomes.
+The file format for an individual consists of a directory named after the
+individual's name, located beneath the directory supplied to `save()`. The
+directory contains four files: metadata.json, which contains the individual's
+metadata serialized using the protobuf JSON mapping, and genome, epigenome,
+and phenome, which contain the corresponding data as raw binary.
 */
 message Individual {
+  Metadata metadata = 1;
+  optional bytes genome = 2;
+  optional bytes epigenome = 3;
+  optional bytes phenome = 4;
+}
+
+/*
+Metadata for an Individual
+*/
+message Metadata {
   /*
   UUID of this individual
   */

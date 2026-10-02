@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "individual.proto";
+
 package evolution;
 
 /*
@@ -21,29 +23,16 @@ service Evolution {
   rpc Death(DeathRequest) returns (DeathResponse);
 }
 
-/*
-Individuals are the entities that evolve
-*/
-message Individual {
-  /*
-  The metadata is a JSON object. See protobuf: "individual.Individual"
-  */
-  bytes metadata = 1;
-  bytes genome = 2;
-  bytes epigenome = 3;
-  bytes phenome = 4;
-}
-
 // Empty
 message SpawnRequest {
 }
 
 message SpawnResponse {
-  repeated Individual parents = 1;
+  repeated individual.Individual parents = 1;
 }
 
 message DeathRequest {
-  Individual individual = 1;
+  individual.Individual individual = 1;
 }
 
 // Empty

@@ -1,9 +1,9 @@
 //! Data structure and persistence for an individual life-form.
 
 use serde::{Deserialize, Serialize};
-use std::ffi::OsString;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, BufWriter, Read, Result, Write, Error};
+use std::ffi::OsString;
+use std::io::{BufRead, BufReader, BufWriter, Error, Read, Result, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::{fs, fs::File};
@@ -31,7 +31,7 @@ impl Individual {
         // this.controller = controller.iter().map(|arg| arg.to_string()).collect();
     }
 
-    /// 
+    ///
     pub fn reproduce(&mut self, child_genome: &[u8]) -> Individual {
         todo!()
         // assert!(!child_genome.is_empty());
@@ -58,19 +58,30 @@ impl Individual {
         // individual
     }
 
-    /// Save an individual to a file.
+    pub fn score(&self) -> Option<f64> {
+        self.metadata.as_ref().unwrap().score.clone()
+    }
+
+    /// Save an individual to file.
     ///
-    /// The method creates the directory and writes four files:
+    /// The format for an individual consists of a directory named after the
+    /// individual's name, located beneath the directory supplied to `save()`.
+    /// The directory contains four files: metadata.json, which contains the
+    /// individual's metadata serialized using the protobuf JSON mapping, and
+    /// genome, epigenome, and phenome, which contain the corresponding data
+    /// as raw binary.
+    ///
+    /// This method creates the directory and writes four files:
     ///
     /// ```text
-    /// <path>/
-    /// ├── metadata.json
-    /// ├── genome
-    /// ├── epigenome
-    /// └── phenome
+    /// <parent>/
+    /// └── <individual.name>/
+    ///     ├── metadata.json
+    ///     ├── genome
+    ///     ├── epigenome
+    ///     └── phenome
     /// ```
-    ///
-    pub fn save(&self, path: impl AsRef<Path>, genome: &[u8], epigenome: &[u8], phenome: &[u8]) -> Result<()> {
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
 
         // Make the directory in case this is the first individual to be saved to it.
@@ -78,66 +89,82 @@ impl Individual {
             std::fs::create_dir(&path)?;
         }
 
-        // 
-        let path = path.join(&self.name);
-        fs::create_dir(&path)?;
+        // Make directory with this individual's name
+        let name = self.metadata.as_ref().unwrap().name.as_str();
+        let path = path.join(name);
+        fs::create_dir(&path)?; // Do not allow overwrite
 
         // Serialize the protobuf message using protobuf-JSON.
-        let metadata = serde_json::to_vec_pretty(self)?;
+        let Some(metadata) = &self.metadata else {
+            todo!();
+        };
+        let metadata = serde_json::to_vec_pretty(&metadata)?;
 
+        // Write all data to file
         fs::write(path.join("metadata.json"), metadata)?;
-        fs::write(path.join("genome"), genome)?;
-        fs::write(path.join("epigenome"), epigenome)?;
-        fs::write(path.join("phenome"), phenome)?;
-
+        fs::write(path.join("genome"), self.genome.as_ref().unwrap_or(&vec![]))?;
+        fs::write(path.join("epigenome"), self.epigenome.as_ref().unwrap_or(&vec![]))?;
+        fs::write(path.join("phenome"), self.phenome.as_ref().unwrap_or(&vec![]))?;
         Ok(())
     }
 
     /// Loads an individual's metadata, genome, epigenome, and phenome
     /// from the specified directory.
-    pub fn load(path: impl AsRef<Path>) -> Result<(Self, Box<[u8]>, Box<[u8]>, Box<[u8]>)> {
+    ///
+    /// Returns a tuple of: `(metadata, genome, epigenome, phenome)`
+    pub fn load(path: impl AsRef<Path>) -> Result<Individual> {
         let path = path.as_ref();
 
         let metadata_file = File::open(path.join("metadata.json"))?;
-        let individual = serde_json::from_reader(metadata_file)?;
+        let metadata = serde_json::from_reader(metadata_file)?;
 
-        let genome = fs::read(path.join("genome"))?.into_boxed_slice();
-        let epigenome = fs::read(path.join("epigenome"))?.into_boxed_slice();
-        let phenome = fs::read(path.join("phenome"))?.into_boxed_slice();
+        let genome = fs::read(path.join("genome"))?;
+        let epigenome = fs::read(path.join("epigenome"))?;
+        let phenome = fs::read(path.join("phenome"))?;
 
-        Ok((individual, genome, epigenome, phenome))
+        Ok(Individual {
+            metadata: Some(metadata),
+            genome: Some(genome),
+            epigenome: Some(epigenome),
+            phenome: Some(phenome),
+        })
+    }
+
+    /// Load every individual stored in the given directory.
+    ///
+    /// Non-directory entries are ignored. If any subdirectory cannot be
+    /// loaded as an individual, the method returns the corresponding error.
+    pub fn load_dir(path: impl AsRef<Path>) -> Result<Vec<Individual>> {
+        let mut directories = fs::read_dir(path)?
+            .filter_map(|entry| match entry {
+                Ok(entry) => match entry.file_type() {
+                    Ok(file_type) if file_type.is_dir() => Some(Ok(entry.path())),
+                    Ok(_) => None,
+                    Err(error) => Some(Err(error)),
+                },
+                Err(error) => Some(Err(error)),
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        directories.sort();
+
+        directories.iter().map(Self::load).collect()
     }
 
     /// Remove this individual's data directory
     pub fn delete(path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
-        // Check for the expected files before deleting the directory
-        let expected = [
-            "metadata.json",
-            "genome",
-            "epigenome",
-            "phenome",
-        ];
-        fn unexpected_file(name: &OsString) -> Result<()> {
+        // Check for the metadata file before deleting the directory
+        if !path.join("metadata.json").exists() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("unexpected file in individual directory: {}", name.to_string_lossy()),
+                format!("expected metadata.json in individual directory: {}", path.display()),
             ));
         }
-        let mut entries = fs::read_dir(path)?;
-        for entry in &mut entries {
-            let entry = entry?;
-            let name = entry.file_name();
-            if !expected.iter().any(|expected| name == *expected) {
-                return unexpected_file(&name);
-            }
-            if !entry.file_type()?.is_file() {
-                return unexpected_file(&name);
-            }
-        }
-        for name in expected {
-            fs::remove_file(path.join(name))?;
-        }
+        fs::remove_file(path.join("metadata.json"))?;
+        fs::remove_file(path.join("genome"))?;
+        fs::remove_file(path.join("epigenome"))?;
+        fs::remove_file(path.join("phenome"))?;
         fs::remove_dir(path)?;
         Ok(())
     }
@@ -163,37 +190,35 @@ mod tests {
     #[test]
     fn save_load_round_trip() {
         let name = uuid4();
-        let individual = Individual {
+        let metadata = Some(Metadata {
             name: name.to_string(),
             environment: Some("test-environment".to_string()),
             body_type: Some("test-body".to_string()),
             controller: vec!["test-controller".to_string()],
             score: Some(42.5),
-            telemetry: [
-                ("temperature".to_string(), "20".to_string()),
-            ]
-            .into_iter()
-            .collect(),
+            telemetry: [("temperature".to_string(), "20".to_string())].into_iter().collect(),
             species: Some("test-species".to_string()),
             parents: vec!["foo".to_string(), "bar".to_string()],
             children: Some(3),
             generation: Some(4),
             ascension: Some(5),
             ..Default::default()
+        });
+        let genome = Some(b"genome data".to_vec());
+        let epigenome = Some(b"epigenome data".to_vec());
+        let phenome = Some(b"phenome data".to_vec());
+        let individual = Individual {
+            metadata,
+            genome,
+            epigenome,
+            phenome,
         };
-
-        let genome = b"genome data";
-        let epigenome = b"epigenome data";
-        let phenome = b"phenome data";
 
         let path = temp_dir().join("individual");
 
-        individual
-            .save(&path, genome, epigenome, phenome)
-            .unwrap();
+        individual.save(&path, genome, epigenome, phenome).unwrap();
 
-        let (loaded, loaded_genome, loaded_epigenome, loaded_phenome) =
-            Individual::load(path.join(&name)).unwrap();
+        let (loaded, loaded_genome, loaded_epigenome, loaded_phenome) = Individual::load(path.join(&name)).unwrap();
 
         assert_eq!(loaded, individual);
         assert_eq!(&*loaded_genome, genome);

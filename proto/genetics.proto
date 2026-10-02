@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "individual.proto";
+
 package genetics;
 
 /*
@@ -16,30 +18,20 @@ This decouples the genetic representation from the control system implementation
 service Genetics {
   /*
   */
-  rpc Reproduce(Parents) returns (Child);
+  rpc Reproduce(ReproduceRequest) returns (ReproduceResponse);
+}
+
+/*
+List parent Individuals
+
+Each parent must have a genome
+*/
+message ReproduceRequest {
+  repeated individual.Individual parents = 1;
 }
 
 /*
 */
-message Parents {
-  repeated Individual parents = 1;
-}
-
-/*
-*/
-message Individual {
-  /*
-  The metadata may contain epigenetic data
-  */
-  string metadata = 1;
-  bytes genome = 2;
-}
-
-/*
-
-*/
-message Child {
-  repeated string controller = 1;
-  bytes genome = 2;
-  bytes phenome = 3;
+message ReproduceResponse {
+  individual.Individual child = 1;
 }
