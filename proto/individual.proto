@@ -64,9 +64,9 @@ message Individual {
   ];
 
   /*
-  Number of parents
+  Names of parents
   */
-  optional uint64 parents = 8 [
+  repeated string parents = 8 [
     json_name = "parents"
   ];
 
@@ -106,7 +106,7 @@ message Individual {
   ];
 
   /*
-  User-defined fields are allowed
+  User-defined fields are allowed in the `extra` dictionary.
   */
   google.protobuf.Struct extra = 100 [
     json_name = "extra"

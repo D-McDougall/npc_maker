@@ -247,34 +247,34 @@ impl Evolution {
             match flag.as_str() {
                 "-p" | "--population" => {
                     let value: usize = args.remove(0).parse().unwrap();
-                    update = value != self.population_size;
+                    update |= value != self.population_size;
                     self.population_size = value;
                 }
                 "-s" | "--selection" => {
                     let selection = args.remove(0);
                     let selection_fn = mate_selection::parse(&selection).unwrap();
-                    update = selection != self.selection;
+                    update |= selection != self.selection;
                     self.selection = selection;
                     self.selection_fn = selection_fn;
                 }
                 "-r" | "--replacement" => {
                     let value = Replacement::parse(args);
-                    update = value != self.replacement;
+                    update |= value != self.replacement;
                     self.replacement = value;
                 }
                 "-l" | "--leaderboard" => {
                     let value: usize = args.remove(0).parse().unwrap();
-                    update = value != self.leaderboard_size;
+                    update |= value != self.leaderboard_size;
                     self.leaderboard_size = value;
                 }
                 "-f" | "--hall_of_fame" => {
                     let value: usize = args.remove(0).parse().unwrap();
-                    update = value != self.hall_of_fame_size;
+                    update |= value != self.hall_of_fame_size;
                     self.hall_of_fame_size = value;
                 }
                 "--parents" => {
                     let value: usize = args.remove(0).parse().unwrap();
-                    update = value != self.num_parents;
+                    update |= value != self.num_parents;
                     self.num_parents = value;
                 }
                 "-v" | "--verbose" => {

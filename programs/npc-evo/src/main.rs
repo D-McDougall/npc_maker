@@ -29,7 +29,7 @@ impl npc_maker::evolution::evolution_server::Evolution for EvolutionServerImpl {
     async fn death(&self, request: Request<DeathRequest>) -> TonicResult<DeathResponse> {
         let individual = todo!();
         self.0.lock().unwrap().death(individual);
-        Ok(Response::new(DeathResponse{}))
+        Ok(Response::new(DeathResponse {}))
     }
 }
 
@@ -117,7 +117,7 @@ impl ServerOptions {
         if this.listen.is_none() {
             let host = this.host.as_ref().map(String::as_str).unwrap_or("127.0.0.1");
             let port = this.port.unwrap_or(47001);
-            this.listen = Some(format!("{}:{}", host,port));
+            this.listen = Some(format!("{}:{}", host, port));
         }
         this
     }
