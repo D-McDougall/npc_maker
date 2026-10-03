@@ -2,10 +2,20 @@ PROTO_DIR  	:= proto
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PYTHON_OUT 	:= python/npc_maker/_protobuf
 
-# Activate the virtual environment
-export PATH := venv/bin:$(PATH)
+# Minimum supported Rust version. Cargo.toml is the single source of truth.
+RUST_MSRV := $(shell sed -n 's/^[[:space:]]*rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml)
 
-.PHONY: all venv python rust package install clean
+# Debian/Ubuntu install versioned toolchains here, which is not on PATH by default.
+# (scripts/ensure-rust.sh uses the same location when it installs via apt.)
+RUST_APT_BIN := /usr/lib/rust-$(RUST_MSRV)/bin
+
+# Pin rustup's cargo/rustc proxies to the MSRV toolchain. Ignored by non-rustup toolchains.
+export RUSTUP_TOOLCHAIN := $(RUST_MSRV)
+
+# Activate the virtual environment, and prefer the apt-installed Rust over any older system one.
+export PATH := venv/bin:$(RUST_APT_BIN):$(PATH)
+
+.PHONY: all venv python rust-toolchain rust package install clean
 
 all: python rust package
 
@@ -33,7 +43,11 @@ python: venv
 		rm -f "$$f.bak"; \
 	done
 
-rust:
+# Ensure a Rust toolchain >= RUST_MSRV is available (installing one if needed).
+rust-toolchain:
+	./scripts/ensure-rust.sh $(RUST_MSRV)
+
+rust: rust-toolchain
 	cargo build --release
 
 package: venv python rust
