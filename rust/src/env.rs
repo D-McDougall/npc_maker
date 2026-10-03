@@ -1,7 +1,6 @@
 //! Environment Interface, for making and using environments
 
 use crate::individual;
-use process_anywhere::{Computer, Process};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
@@ -320,6 +319,7 @@ pub fn death(individual: &str) {
     println!(r#"{{"Death":"{}"}}"#, individual);
 }
 
+/*
 /// This class encapsulates an instance of an environment and provides methods
 /// for using environments.
 ///
@@ -534,6 +534,8 @@ pub enum Message {
     /// Report the death of an individual.
     Death { individual: Box<individual::Individual> },
 }
+
+*/
 
 #[cfg(test)]
 mod tests {

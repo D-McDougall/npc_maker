@@ -3,4 +3,4 @@
     members = ["rust", "programs/npc-evo", "programs/npc-server"]
 
 [workspace.package]
-    rust-version = "1.85"
+    rust-version = "1.91"

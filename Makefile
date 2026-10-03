@@ -14,7 +14,7 @@ venv:
 	pip install -r requirements.txt
 	pip install build twine
 
-python:
+python: venv
 	# Setup python module for protobuf generated file
 	mkdir -p $(PYTHON_OUT)
 	touch $(PYTHON_OUT)/__init__.py
@@ -36,7 +36,7 @@ python:
 rust:
 	cargo build --release
 
-package: python rust
+package: venv python rust
 	# Copy programs into python release
 	cp -p target/release/npc-evo        python/npc_maker/programs/
 	cp -p target/release/npc-server     python/npc_maker/programs/
@@ -47,7 +47,7 @@ package: python rust
 	python -m build --wheel
 	python -m twine check dist/npc_maker-*.whl
 
-install: package
+install: venv package
 	pip install --force-reinstall dist/npc_maker-*.whl
 
 clean:

@@ -14,7 +14,6 @@
 [dependencies]
     chrono              = { version = "0.4" }
     mate_selection      = { version = "0.1" }
-    process_anywhere    = { version = "0.5" }
     rand                = { version = "0.10" }
     serde               = { version = "1.0", features = ["derive"] }
     serde_json          = { version = "1.0", features = ["float_roundtrip"] }
@@ -28,3 +27,4 @@
 [build-dependencies]
     tonic-prost-build   = "0.14"
     pbjson-build        = "0.9"
+    protoc-bin-vendored = "3.2.0"
