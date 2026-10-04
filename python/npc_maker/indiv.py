@@ -1,118 +1,334 @@
 """
-Data structure to represent an individual life-form
+Data structure and persistence for an individual life-form.
+
+An `Individual` is a thin wrapper around the protobuf message defined in
+`proto/individual.proto`. The wrapper adds convenient attribute access,
+reproduction bookkeeping, and persistence to and from disk. Use `from_proto()`
+and `to_proto()` to move between this class and the raw protobuf message,
+for example when sending individuals over gRPC.
+
+File format
+-----------
+This is the same format that is read and written by the Rust API
+(`rust/src/individual.rs`). An individual is stored as a directory named after
+the individual, located beneath a directory supplied to `save()`:
+
+    <parent>/
+    └── <individual.name>/
+        ├── metadata.json   protobuf-JSON encoding of the `Metadata` message
+        ├── genome          raw bytes
+        ├── epigenome       raw bytes
+        └── phenome         raw bytes
+
+All four files are required. Absent (`None`) genomes, epigenomes, and phenomes
+are written as empty files, and are read back as empty byte strings.
 """
 
-from pathlib import Path
-from .utils import clean_command
-import io
+import datetime
 import json
 import math
 import os
-import tempfile
-import uuid
+import secrets
+import shlex
+import shutil
+from pathlib import Path
+
+from google.protobuf import json_format
+from google.protobuf.timestamp_pb2 import Timestamp
+
+try:
+    from ._protobuf import individual_pb2
+except ImportError as error:  # pragma: no cover
+    raise ImportError(
+        "the protobuf modules of the NPC Maker have not been generated, run `make python`"
+    ) from error
 
 __all__ = (
     "Individual",
 )
 
-def _check_genome(genome):
-    assert type(genome) is bytes
-    assert len(genome) > 0
+_METADATA_FILE = "metadata.json"
+_BLOB_FILES = ("genome", "epigenome", "phenome")
 
-# All individuals have these fields, with default value constructors.
-_standard_fields = {
-    "name": None,
-    "environment": None,
-    "body_type": None,
-    "controller": None,
-    "score": type(None),
-    "telemetry": dict,
-    "epigenome": dict,
-    "species": lambda: str(uuid.uuid4()),
-    "parents": list,
-    "children": list,
-    "generation": int,
-    "ascension": type(None),
-    "birth_date": str,
-    "death_date": str,
-}
+
+def _uuid4() -> str:
+    """
+    Generate a universally unique name: 128 random bits as 32 uppercase hex digits.
+
+    This is the same scheme as the Rust API.
+    """
+    return f"{secrets.randbits(128):032X}"
+
+
+def _check_name(name: str) -> str:
+    """
+    Individuals are stored in directories which are named after them,
+    so reject names which could refer to anything other than a child directory.
+    """
+    if not name or name in (".", "..") or any(char in name for char in "/\\\0"):
+        raise ValueError(f"invalid individual name {name!r}")
+    return name
+
+
+def _command(command) -> list:
+    """
+    Clean a command line invocation into a list of strings.
+
+    Argument may be None, a string (split into words using shell syntax),
+    a path, or an iterable of strings and paths.
+    """
+    if command is None:
+        return []
+    if isinstance(command, str):
+        return shlex.split(command)
+    if isinstance(command, os.PathLike):
+        return [os.fspath(command)]
+    words = []
+    for word in command:
+        if isinstance(word, (bytes, bytearray)):
+            raise TypeError(f"command arguments must be strings, found {type(word).__name__}")
+        words.append(os.fspath(word) if isinstance(word, os.PathLike) else str(word))
+    return words
+
+
+def _optional_field(field: str, doc: str) -> property:
+    """
+    Property for an `optional` scalar field of the Metadata message.
+    The value is None when the field is unset, and assigning None unsets it.
+    """
+    def getter(self):
+        metadata = self._message.metadata
+        return getattr(metadata, field) if metadata.HasField(field) else None
+
+    def setter(self, value):
+        if value is None:
+            self._message.metadata.ClearField(field)
+        else:
+            setattr(self._message.metadata, field, value)
+
+    return property(getter, setter, doc=doc)
+
+
+def _timestamp_field(field: str, doc: str) -> property:
+    """
+    Property for an optional Timestamp field, exposed as a timezone-aware
+    `datetime` in UTC. Naive datetimes are assumed to be in UTC.
+    """
+    def getter(self):
+        metadata = self._message.metadata
+        if not metadata.HasField(field):
+            return None
+        return getattr(metadata, field).ToDatetime(tzinfo=datetime.timezone.utc)
+
+    def setter(self, value):
+        if value is None:
+            self._message.metadata.ClearField(field)
+        else:
+            timestamp = Timestamp()
+            timestamp.FromDatetime(value)
+            getattr(self._message.metadata, field).CopyFrom(timestamp)
+
+    return property(getter, setter, doc=doc)
+
+
+def _blob_field(field: str, doc: str) -> property:
+    """
+    Property for an optional `bytes` field of the Individual message.
+    The value is None when the field is unset, and assigning None unsets it.
+    """
+    def getter(self):
+        return getattr(self._message, field) if self._message.HasField(field) else None
+
+    def setter(self, value):
+        if value is None:
+            self._message.ClearField(field)
+        else:
+            setattr(self._message, field, bytes(value))
+
+    return property(getter, setter, doc=doc)
+
 
 class Individual:
     """
-    Container for a distinct life-form and all of its associated data
+    Container for a distinct life-form and all of its associated data.
+
+    Fields that the protobuf specification marks as optional read as None
+    until they are assigned. Assigning None clears them.
     """
-    def __init__(self,
-                environment: str,
-                body_type: str,
-                controller: [str],
-                genome: bytes):
-        """
-        Create a new individual. This is used to initialize new populations
-        """
-        _check_genome(genome)
-        self.name           = str(uuid.uuid4())
-        self.environment    = str(environment)
-        self.body_type      = str(body_type)
-        self.controller     = clean_command(controller)
-        self.genome         = genome
-        self.score          = None
-        self.telemetry      = {}
-        self.epigenome      = {}
-        self.species        = str(uuid.uuid4())
-        self.parents        = []
-        self.children       = []
-        self.birth_date     = ""
-        self.death_date     = ""
-        self.generation     = 0
-        self.ascension      = None
-        self.extra          = {}
-        self.path           = None
 
-    def get_name(self) -> str:
-        """
-        Get this individual's name, which is a UUID string
-        """
-        return self.name
+    __slots__ = ("_message",)
 
-    def get_environment(self) -> str:
+    def __init__(self, environment: str, body_type: str, controller, genome: bytes):
         """
-        Get the name of environment which contains this individual
-        """
-        return self.environment
+        Create a new individual. This is used to initialize new populations.
 
-    def get_body_type(self) -> str:
-        """
-        Get the name of this individual's body_type
-        """
-        return self.body_type
+        Argument environment is the name of the environment which will contain
+                 this individual.
 
-    def get_controller(self) -> list:
-        """
-        Get the command line invocation for the controller program
-        """
-        return list(self.controller)
+        Argument body_type is the name of this individual's body type.
 
-    def get_genome(self) -> bytes:
-        """
-        Get this individual's genetic data,
-        which is an immutable byte array
-        """
-        if self.genome is None:
-            with open(self.path, 'rb') as file:
-                data = file.read()
-            metadata, self.genome = data.split(b'\x00', maxsplit=1)
-        return self.genome
+        Argument controller is the command line invocation of the controller
+                 program: a list of strings, or a single string which will be
+                 split into words. May be empty for environments without
+                 controllers.
 
-    def get_score(self) -> float:
+        Argument genome is this individual's genetic data, it must not be empty.
         """
-        Get the most recently assigned score,
-        or None if it has not been assigned yet
+        genome = bytes(genome)
+        if not genome:
+            raise ValueError("genome must not be empty")
+        self._message = individual_pb2.Individual()
+        self.name        = _uuid4()
+        self.environment = str(environment)
+        self.body_type   = str(body_type)
+        self.controller  = controller
+        self.species     = _uuid4()
+        self.generation  = 0
+        self.children    = 0
+        self.genome      = genome
+
+    @classmethod
+    def from_proto(cls, message) -> "Individual":
         """
-        return self.score
+        Wrap a protobuf `individual_pb2.Individual` message.
+
+        The message is *not* copied: changes made through the returned object
+        are visible in the message, and vice versa.
+        """
+        if not isinstance(message, individual_pb2.Individual):
+            raise TypeError(f"expected an Individual protobuf message, found {type(message).__name__}")
+        self = cls.__new__(cls)
+        self._message = message
+        return self
+
+    def to_proto(self):
+        """
+        Get the underlying protobuf `individual_pb2.Individual` message,
+        for example to send over gRPC.
+
+        This returns a reference, not a copy.
+        """
+        return self._message
+
+    def __eq__(self, other):
+        if not isinstance(other, Individual):
+            return NotImplemented
+        return self._message == other._message
+
+    def __repr__(self):
+        return (f"Individual(name={self.name!r}, environment={self.environment!r}, "
+                f"body_type={self.body_type!r}, score={self.score!r})")
+
+    # Metadata fields, see proto/individual.proto for the authoritative documentation.
+
+    @property
+    def name(self) -> str:
+        """
+        This individual's name, which is a UUID string.
+        It is also the name of the directory that the individual is saved in.
+        """
+        return self._message.metadata.name
+
+    @name.setter
+    def name(self, value: str):
+        self._message.metadata.name = value
+
+    environment = _optional_field("environment",
+        "Name of the environment that this individual lives in")
+
+    body_type = _optional_field("body_type",
+        "Name of the body type used by this individual")
+
+    @property
+    def controller(self) -> list:
+        """
+        Command line invocation of the controller program, as a list of strings.
+
+        Returns a copy, assign a new value to modify it.
+        """
+        return list(self._message.metadata.controller)
+
+    @controller.setter
+    def controller(self, value):
+        self._message.metadata.controller[:] = _command(value)
+
+    score = _optional_field("score",
+        "Reproductive fitness of this individual, as assessed by the environment, "
+        "or None if it has not been assigned yet")
+
+    @property
+    def telemetry(self):
+        """
+        Environmental information, a dictionary of strings to strings.
+
+        Returns a reference to the individual's internal data; modifications
+        are permanent. Values must be strings.
+        """
+        return self._message.metadata.telemetry
+
+    @telemetry.setter
+    def telemetry(self, value):
+        self._message.metadata.telemetry.clear()
+        self._message.metadata.telemetry.update(value)
+
+    species = _optional_field("species",
+        "UUID for artificial speciation. "
+        "Mating may be restricted to individuals of the same species.")
+
+    @property
+    def parents(self) -> list:
+        """
+        Names of this individual's parents.
+
+        Returns a copy, assign a new value to modify it.
+        """
+        return list(self._message.metadata.parents)
+
+    @parents.setter
+    def parents(self, value):
+        self._message.metadata.parents[:] = value
+
+    children = _optional_field("children",
+        "Number of children")
+
+    generation = _optional_field("generation",
+        "Number of generations that came before this individual")
+
+    ascension = _optional_field("ascension",
+        "Number of individuals who died before this one, "
+        "or None if this individual has not yet died. "
+        "This is assigned by the evolution program.")
+
+    birth_date = _timestamp_field("birth_date",
+        "UTC time at which this individual was born, as a timezone-aware datetime, "
+        "or None if it has not yet been born")
+
+    death_date = _timestamp_field("death_date",
+        "UTC time at which this individual died, as a timezone-aware datetime, "
+        "or None if it has not yet died")
+
+    @property
+    def extra(self):
+        """
+        User-defined fields, a JSON-like dictionary.
+
+        Returns a reference to the individual's internal `google.protobuf.Struct`;
+        modifications are permanent. Like all JSON, numbers are stored as floats.
+        """
+        return self._message.metadata.extra
+
+    genome = _blob_field("genome",
+        "This individual's genetic data, an immutable byte array")
+
+    epigenome = _blob_field("epigenome",
+        "This individual's epigenetic data, a byte array")
+
+    phenome = _blob_field("phenome",
+        "This individual's phenotype, the data which is sent to the controller")
 
     def get_custom_score(self, score_function="score") -> float:
         """
-        Apply a custom scoring function to this individual
+        Apply a custom scoring function to this individual.
 
         Argument score_function must be one of the following:
             * A callable function: f(individual) -> float,
@@ -133,215 +349,149 @@ class Individual:
             score = self.telemetry[score_function]
         else:
             raise ValueError("unrecognized score function " + repr(score_function))
-        # 
         if score is None:
             score = -math.inf
-        # 
         return float(score)
 
-    def get_telemetry(self) -> dict:
-        """
-        Get the environmental info dictionary
-
-        Returns a reference to the individual's internal "telemetry" dictionary;
-        modifications are permanent.
-        """
-        return self.telemetry
-
-    def get_epigenome(self) -> dict:
-        """
-        Get the epigenetic info dictionary
-
-        Returns a reference to the individual's internal "epigenome" dictionary;
-        modifications are permanent.
-        """
-        return self.epigenome
-
-    def get_species(self) -> str:
-        """
-        Get the species UUID
-
-        Mating may be restricted to individuals of the same species.
-        """
-        return self.species
-
-    def get_parents(self) -> [str]:
-        """
-        Get the names of this individual's parents
-        """
-        return list(self.parents)
-
-    def get_children(self) -> [str]:
-        """
-        Get the names of this individual's children
-        """
-        return list(self.children)
-
-    def get_birth_date(self) -> str:
-        """
-        The time of birth, as a UTC timestamp,
-        or an empty string if this individual has not yet been born
-        """
-        return self.birth_date
-
-    def get_death_date(self) -> str:
-        """
-        The time of death, as a UTC timestamp,
-        or an empty string if this individual has not yet died
-        """
-        return self.death_date
-
-    def get_generation(self) -> int:
-        """
-        How many cohorts of the population size passed before this individual was born?
-        """
-        return self.generation
-
-    def get_ascension(self) -> int:
-        """
-        How many individuals died before this individual?
-        Returns None if this individual has not yet died.
-        """
-        return self.ascension
-
-    def get_extra(self) -> dict:
-        """
-        Get all custom / unofficial fields that are saved with the individual
-
-        Returns a reference to this individual's internal data.
-        Changes made to the returned value will persist with the individual.
-        """
-        return self.extra
-
-    def get_path(self) -> Path:
-        """
-        Returns the file path this individual was loaded from or saved to.
-        Returns None if this individual has not touched the file system.
-        """
-        return self.path
+    # Reproduction
 
     def asex(self, child_genome: bytes) -> "Individual":
         """
-        Asexually reproduce an individual
+        Asexually reproduce this individual.
+
+        Returns the child, which inherits this individual's environment, body
+        type, controller, and species. This also counts the child in this
+        individual's `children`.
         """
-        _check_genome(child_genome)
-        cls = type(self)
-        child = cls(child_genome,
-                environment = self.environment,
-                body_type   = self.body_type,
-                controller  = self.controller,
-                epigenome   = self.epigenome,
-                species     = self.species,
-                generation  = self.generation + 1,
-                parents     = [self.name])
-        self.children.append(child.name)
-        return child
+        return type(self).sex([self], child_genome)
 
     @classmethod
-    def sex(cls, parents: ["Individual"], child_genome: bytes) -> "Individual":
+    def sex(cls, parents, child_genome: bytes) -> "Individual":
         """
-        Sexually reproduce the given individuals
+        Sexually reproduce the given individuals.
+
+        Argument parents is a list of Individuals. The child inherits its
+        environment, body type, controller, and species from the first parent,
+        and is one generation older than its oldest parent. Parents are
+        recorded in the order given, which may include repeats. Each distinct
+        parent counts the child once in its `children`.
+
+        Returns the child.
         """
         parents = list(parents)
-        # Technically the spec requires 2 parents, 1 parent should not crash it
-        assert len(parents) >= 1
-        assert all(isinstance(p, cls) for p in parents)
-        _check_genome(child_genome)
-        self = parents[0]
-        child = cls(child_genome,
-                environment = self.environment,
-                body_type   = self.body_type,
-                species     = self.species,
-                controller  = self.controller,
-                generation  = max(p.generation for p in parents) + 1,
-                parents     = list(p.name for p in parents))
-        # Update the parent's children.
-        for p in parents:
-            p.children.append(child.name)
+        if not parents:
+            raise ValueError("at least one parent is required")
+        if not all(isinstance(parent, Individual) for parent in parents):
+            raise TypeError("parents must be Individuals")
+        first = parents[0]
+        child = cls(first.environment or "", first.body_type or "", first.controller, child_genome)
+        child.environment = first.environment
+        child.body_type   = first.body_type
+        child.species     = first.species
+        child.generation  = max(parent.generation or 0 for parent in parents) + 1
+        child.parents     = [parent.name for parent in parents]
+        for parent in {id(parent): parent for parent in parents}.values():
+            parent.children = (parent.children or 0) + 1
         return child
 
-    def save(self, path=None) -> Path:
-        """
-        Serialize this individual to JSON and write it to a file
+    # Persistence
 
-        Argument path is the directory to save in. Optional, if missing will
-        either overwrite the previous save file or save to temporary directory.
-        The filename will be the individual's name with the ".indiv" file extension.
-
-        Returns the file path of the saved individual.
+    def save(self, path) -> Path:
         """
-        if not path:
-            if self.path:
-                path = self.path.parent
-            else:
-                path = tempfile.gettempdir()
+        Save this individual to the file system.
+
+        Argument path is the directory to save in, which is created if it
+        does not exist (but its own parent directory must exist). This writes a
+        new directory named after the individual, see the module documentation
+        for the file format.
+
+        Existing individuals are never overwritten, this raises FileExistsError.
+        If an error occurs, then the partially written individual is removed.
+
+        Returns the path of the directory containing the individual's files,
+        which is the argument to `load()`.
+        """
+        name = _check_name(self.name)
         path = Path(path)
-        # Make the directory in case this is the first individual to be saved to it.
-        if not path.exists():
-            path.mkdir()
-        assert path.is_dir()
-        path = path.joinpath(self.name + ".indiv")
-        # Load genome from file before modifying the file system.
-        genome = self.get_genome()
-        # Unofficial fields, in case of conflict these take lower precedence.
-        data = dict(self.extra)
-        # Official fields, as described by the specification.
-        for attribute in _standard_fields:
-            value = getattr(self, attribute, None)
-            if value:
-                data[attribute] = value
-        # Convert paths to strings for JSON serialization.
-        if self.controller:
-            data["controller"]    = list(data["controller"])
-            data["controller"][0] = str(data["controller"][0])
-        # 
-        data = json.dumps(data)
-        # Save to a temporary file, sync, and atomic move into place.
-        fd, tmp_path = tempfile.mkstemp()
-        file = os.fdopen(fd, "wb")
-        file.write(data.encode("utf-8"))
-        file.write(b'\x00')
-        file.write(genome)
-        file.flush()
-        file.close()
-        Path(tmp_path).rename(path)
-        self.path = path
-        return path
+        path.mkdir(exist_ok=True)
+        directory = path.joinpath(name)
+        directory.mkdir()  # Do not allow overwrite
+        try:
+            metadata = json_format.MessageToJson(
+                self._message.metadata,
+                preserving_proto_field_name=True,
+                indent=2,
+                ensure_ascii=False)
+            directory.joinpath(_METADATA_FILE).write_bytes(metadata.encode("utf-8"))
+            for blob in _BLOB_FILES:
+                directory.joinpath(blob).write_bytes(getattr(self, blob) or b"")
+        except BaseException:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise
+        return directory
 
     @classmethod
-    def load(cls, path) -> 'Individual':
+    def load(cls, path) -> "Individual":
         """
-        Load a previously saved individual
+        Load an individual's metadata, genome, epigenome, and phenome.
 
-        Returns None if the given path does not end with ".indiv"
+        Argument path is the directory containing the individual's files,
+        which is the directory named after the individual. This is the value
+        returned by `save()`, *not* the directory which was passed to it.
+
+        Raises FileNotFoundError if any of the four files is missing,
+        and ValueError if the metadata is not valid.
         """
-        path = Path(path)
-        if path.suffix.lower() != ".indiv":
-            return
-        text = b''
-        with open(path, 'rb') as file:
-            while True:
-                chunk = file.read(io.DEFAULT_BUFFER_SIZE)
-                split = chunk.split(b'\x00', maxsplit=1)
-                text += split[0]
-                if len(split) > 1:
-                    break
-        metadata = json.loads(text)
-        self = cls.__new__(cls, **metadata)
-        for attribute, default_value in _standard_fields.items():
-            if attribute in metadata:
-                value = metadata.pop(attribute)
-            elif attribute == "name":
-                value = path.stem
-            elif default_value is not None:
-                value = default_value()
-            else:
-                continue
-            setattr(self, attribute, value)
-        self.extra = metadata
-        self.path = path
-        self.genome = None
-        # Convert controller path back to Path objects.
-        if getattr(self, "controller", False):
-            self.controller[0] = Path(self.controller[0])
-        return self
+        directory = Path(path)
+        metadata = cls._read_metadata(directory)
+        message = individual_pb2.Individual(metadata=metadata)
+        for blob in _BLOB_FILES:
+            setattr(message, blob, directory.joinpath(blob).read_bytes())
+        return cls.from_proto(message)
+
+    @staticmethod
+    def load_dir(path) -> list:
+        """
+        Load the metadata of every individual stored in the given directory.
+
+        Only the metadata is read, which is much faster than loading the
+        individuals. Returns a list of protobuf `individual_pb2.Metadata`
+        messages. Entries which are not directories are ignored. If any
+        subdirectory cannot be loaded then this raises the corresponding error.
+        """
+        directories = []
+        with os.scandir(path) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    directories.append(Path(entry.path))
+        return [Individual._read_metadata(directory) for directory in sorted(directories)]
+
+    @staticmethod
+    def delete(path):
+        """
+        Remove an individual's directory from the file system.
+
+        Argument path is the directory containing the individual's files,
+        like the argument to `load()`. Only the individual's four files are
+        removed, and this raises an error if the directory contains anything else.
+        """
+        directory = Path(path)
+        if not directory.joinpath(_METADATA_FILE).exists():
+            raise ValueError(f"expected {_METADATA_FILE} in individual directory: {directory}")
+        directory.joinpath(_METADATA_FILE).unlink()
+        for blob in _BLOB_FILES:
+            directory.joinpath(blob).unlink()
+        directory.rmdir()
+
+    @staticmethod
+    def _read_metadata(directory: Path):
+        text = directory.joinpath(_METADATA_FILE).read_bytes()
+        try:
+            # Decode the JSON here instead of using json_format.Parse(), because
+            # Parse() accepts a top-level list as if it were an empty message.
+            data = json.loads(text.decode("utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("expected a JSON object")
+            return json_format.ParseDict(data, individual_pb2.Metadata())
+        except (ValueError, json_format.ParseError) as error:
+            raise ValueError(f"invalid {_METADATA_FILE} in {directory}: {error}") from error
