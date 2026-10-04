@@ -15,8 +15,10 @@ fn uuid4() -> String {
 
 impl Individual {
     /// Create a new individual. This is used to initialize new populations
+    ///
+    /// The caller must set the genome, epigenome, and phenome attributes.
     pub fn new() -> Individual {
-        todo!()
+        todo!("Claude: write this based on the python version of this method")
     }
 
     /// Reproduce the given individuals.
@@ -31,7 +33,7 @@ impl Individual {
     /// 
     /// The caller must set the genome, epigenome, and phenome attributes.
     pub fn reproduce(&mut self, parents: &[&Individual]) -> Individual {
-        todo!()
+        todo!("Claude: write this based on the python version of this method")
     }
 
     pub fn score(&self) -> Option<f64> {
