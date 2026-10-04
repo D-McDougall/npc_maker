@@ -31,6 +31,7 @@ import os
 import secrets
 import shlex
 import shutil
+import uuid
 from pathlib import Path
 
 from google.protobuf import json_format
@@ -153,6 +154,7 @@ class Individual:
         self._message = individual_pb2.Individual()
         self.name        = _uuid4()
         self.species     = _uuid4()
+        self.generation  = 0
 
     @classmethod
     def from_proto(cls, message) -> "Individual":

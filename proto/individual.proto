@@ -41,13 +41,13 @@ copy of the individual locally.
 1) The environment requests to mate some individuals via
 `environment.Environment::Mate()`. Parents are specified by name, and the
 router will have copies of the individuals on hand while they are alive in the
-enviroment.
+environment.
 
-3) The router forwards the given parents to the genetic service via
+2) The router forwards the given parents to the genetic service via
 `genetics.Genetics::Reproduce()`. The genetic service creates a new Individual
 and returns it to the router.
 
-4) The router sends the Individual to the environment. The router also keeps a
+3) The router sends the Individual to the environment. The router also keeps a
 copy of the individual locally.
 
 ## Replay Sequence
@@ -133,7 +133,7 @@ message Metadata {
   UUID of this individual
 
   Typically, this will be a 128 bit random number as 32 uppercase hex digits
-  (UUID-4), but technically it can be any string that us universally unique
+  (UUID-4), but technically it can be any string that is universally unique
   among all individuals.
 
   Name must be a valid file system directory name.
@@ -205,8 +205,8 @@ message Metadata {
   /*
   Number of generations that came before this individual.
 
-  This is the lineage depth, which is defined recursively as the oldest parent's
-  generation plus one, with 0 for founders.
+  This is the lineage depth, which is defined highest generation among its
+  parents plus one, with 0 for founders.
   */
   optional uint64 generation = 10 [
     json_name = "generation"
