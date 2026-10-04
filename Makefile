@@ -1,28 +1,17 @@
 PROTO_DIR  	:= proto
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PYTHON_OUT 	:= python/npc_maker/_protobuf
-
-# Minimum supported Rust version. Cargo.toml is the single source of truth.
-RUST_MSRV := $(shell sed -n 's/^[[:space:]]*rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml)
-
-# Debian/Ubuntu install versioned toolchains here, which is not on PATH by default.
-# (scripts/ensure-rust.sh uses the same location when it installs via apt.)
-RUST_APT_BIN := /usr/lib/rust-$(RUST_MSRV)/bin
-
-# Pin rustup's cargo/rustc proxies to the MSRV toolchain. Ignored by non-rustup toolchains.
-export RUSTUP_TOOLCHAIN := $(RUST_MSRV)
-
-# Activate the virtual environment, and prefer the apt-installed Rust over any older system one.
-export PATH := venv/bin:$(RUST_APT_BIN):$(PATH)
+PYTHON  	:= venv/bin/python
+PIP 		:= venv/bin/pip
 
 .PHONY: all venv python rust-toolchain rust package install clean
 
-all: python rust package
+all: package
 
 venv:
-	test -d venv || python3 -m venv venv # Create venv if it doesn't exist
-	pip install -r requirements.txt
-	pip install build twine
+	test -d venv || $(PYTHON) -m venv venv # Create venv if it doesn't exist
+	$(PIP) install -r requirements.txt
+	$(PIP) install build twine
 
 python: venv
 	# Setup python module for protobuf generated file
@@ -30,7 +19,7 @@ python: venv
 	touch $(PYTHON_OUT)/__init__.py
 	echo "*" > $(PYTHON_OUT)/.gitignore
 	# Run protobuf
-	python -m grpc_tools.protoc \
+	$(PYTHON) -m grpc_tools.protoc \
 		-I$(PROTO_DIR) \
 		--python_out=$(PYTHON_OUT) \
 		--grpc_python_out=$(PYTHON_OUT) \
@@ -43,14 +32,10 @@ python: venv
 		rm -f "$$f.bak"; \
 	done
 
-# Ensure a Rust toolchain >= RUST_MSRV is available (installing one if needed).
-rust-toolchain:
-	./scripts/ensure-rust.sh $(RUST_MSRV)
-
-rust: rust-toolchain
+rust:
 	cargo build --release
 
-package: venv python rust
+package: python rust
 	# Copy programs into python release
 	cp -p target/release/npc-evo        python/npc_maker/programs/
 	cp -p target/release/npc-server     python/npc_maker/programs/
@@ -58,11 +43,11 @@ package: venv python rust
 	cp -p programs/npc-server/npc-server.py     python/npc_maker/programs/npc_server.py
 	cp -p programs/npc-player.py        		python/npc_maker/programs/npc_player.py
 	# Build the python distributable
-	python -m build --wheel
-	python -m twine check dist/npc_maker-*.whl
+	$(PYTHON) -m build --wheel
+	$(PYTHON) -m twine check dist/npc_maker-*.whl
 
-install: venv package
-	pip install --force-reinstall dist/npc_maker-*.whl
+install: package
+	$(PIP) install --force-reinstall dist/npc_maker-*.whl
 
 clean:
 	rm -rf $(PYTHON_OUT) 	  # protobuf
