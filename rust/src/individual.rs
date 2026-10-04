@@ -15,43 +15,23 @@ fn uuid4() -> String {
 
 impl Individual {
     /// Create a new individual. This is used to initialize new populations
-    pub fn new(_environment: &str, _body_type: &str, _controller: &[&str], _genome: Box<[u8]>) -> Individual {
+    pub fn new() -> Individual {
         todo!()
-        // assert!(!controller.is_empty());
-        // assert!(!genome.is_empty());
-        // let mut this = Individual::default();
-        // this.name = uuid4();
-        // this.environment = environment.to_string();
-        // this.body_type = body_type.to_string();
-        // this.species = uuid4();
-        // this.controller = controller.iter().map(|arg| arg.to_string()).collect();
     }
 
-    ///
-    pub fn reproduce(&mut self, _child_genome: &[u8]) -> Individual {
+    /// Reproduce the given individuals.
+    /// 
+    /// Argument parents is a list of Individuals. The child inherits its
+    /// environment, body type, controller, and species from the first parent,
+    /// and is one generation older than its oldest parent. Parents are
+    /// recorded in the order given, which may include repeats. Each distinct
+    /// parent counts the child once in its `children`.
+    /// 
+    /// Returns the child.
+    /// 
+    /// The caller must set the genome, epigenome, and phenome attributes.
+    pub fn reproduce(&mut self, parents: &[&Individual]) -> Individual {
         todo!()
-        // assert!(!child_genome.is_empty());
-        // let individual = Individual {
-        //     name: uuid4(),
-        //     ascension: None,
-        //     environment: self.environment.clone(),
-        //     body_type: self.body_type.clone(),
-        //     species: self.species.clone(),
-        //     controller: self.controller.clone(),
-        //     genome: OnceLock::from(Arc::from(child_genome)),
-        //     telemetry: HashMap::new(),
-        //     epigenome: HashMap::new(),
-        //     score: None,
-        //     generation: self.generation + 1,
-        //     parents: vec![self.name.clone()],
-        //     children: vec![],
-        //     birth_date: String::new(),
-        //     death_date: String::new(),
-        //     extra: HashMap::new(),
-        //     path: None,
-        // };
-        // self.children.push(individual.name.clone());
-        // individual
     }
 
     pub fn score(&self) -> Option<f64> {

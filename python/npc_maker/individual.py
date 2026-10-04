@@ -53,21 +53,9 @@ _BLOB_FILES = ("genome", "epigenome", "phenome")
 
 def _uuid4() -> str:
     """
-    Generate a universally unique name: 128 random bits as 32 uppercase hex digits.
-
-    This is the same scheme as the Rust API.
+    Generate a universally unique name, format unspecified.
     """
-    return f"{secrets.randbits(128):032X}"
-
-
-def _check_name(name: str) -> str:
-    """
-    Individuals are stored in directories which are named after them,
-    so reject names which could refer to anything other than a child directory.
-    """
-    if not name or name in (".", "..") or any(char in name for char in "/\\\0"):
-        raise ValueError(f"invalid individual name {name!r}")
-    return name
+    return str(uuid.uuid4())
 
 
 def _command(command) -> list:
@@ -158,34 +146,13 @@ class Individual:
 
     __slots__ = ("_message",)
 
-    def __init__(self, environment: str, body_type: str, controller, genome: bytes):
+    def __init__(self):
         """
         Create a new individual. This is used to initialize new populations.
-
-        Argument environment is the name of the environment which will contain
-                 this individual.
-
-        Argument body_type is the name of this individual's body type.
-
-        Argument controller is the command line invocation of the controller
-                 program: a list of strings, or a single string which will be
-                 split into words. May be empty for environments without
-                 controllers.
-
-        Argument genome is this individual's genetic data, it must not be empty.
         """
-        genome = bytes(genome)
-        if not genome:
-            raise ValueError("genome must not be empty")
         self._message = individual_pb2.Individual()
         self.name        = _uuid4()
-        self.environment = str(environment)
-        self.body_type   = str(body_type)
-        self.controller  = controller
         self.species     = _uuid4()
-        self.generation  = 0
-        self.children    = 0
-        self.genome      = genome
 
     @classmethod
     def from_proto(cls, message) -> "Individual":
@@ -204,7 +171,7 @@ class Individual:
     def to_proto(self):
         """
         Get the underlying protobuf `individual_pb2.Individual` message,
-        for example to send over gRPC.
+        for example: to serialize, or to send over gRPC.
 
         This returns a reference, not a copy.
         """
@@ -212,12 +179,70 @@ class Individual:
 
     def __eq__(self, other):
         if not isinstance(other, Individual):
-            return NotImplemented
+            return TypeError(
+                f"invalid comparison between types {type(self).__name__} and {type(other).__name__}")
         return self._message == other._message
 
     def __repr__(self):
-        return (f"Individual(name={self.name!r}, environment={self.environment!r}, "
-                f"body_type={self.body_type!r}, score={self.score!r})")
+        return (f"Individual(name={self.name!r}, body_type={self.body_type!r}, score={self.score!r})")
+
+    def get_custom_score(self, score_function="score") -> float:
+        """
+        Apply a custom scoring function to this individual.
+
+        Argument score_function must be one of the following:
+            * A callable function: f(individual) -> float,
+            * The word "score",
+            * The word "ascension",
+            * A key in the individual's telemetry dictionary. The corresponding
+              value will be converted into a float.
+
+        A score of None is converted into negative infinity.
+        """
+        if callable(score_function):
+            score = score_function(self)
+        elif not score_function or score_function == "score":
+            score = self.score
+        elif score_function == "ascension":
+            score = self.ascension
+        elif score_function in self.telemetry:
+            score = self.telemetry[score_function]
+        else:
+            raise ValueError("unrecognized score function " + repr(score_function))
+        if score is None:
+            score = -math.inf
+        return float(score)
+
+    @classmethod
+    def reproduce(cls, parents) -> "Individual":
+        """
+        Reproduce the given individuals.
+
+        Argument parents is a list of Individuals. The child inherits its
+        environment, body type, controller, and species from the first parent,
+        and is one generation older than its oldest parent. Parents are
+        recorded in the order given, which may include repeats. Each distinct
+        parent counts the child once in its `children`.
+
+        Returns the child.
+
+        The caller must set the genome, epigenome, and phenome attributes.
+        """
+        parents = list(parents)
+        if not all(isinstance(parent, Individual) for parent in parents):
+            raise TypeError("parents must be Individuals")
+        first = parents[0]
+        child = cls()
+        child.environment = first.environment
+        child.body_type   = first.body_type
+        child.controller  = first.controller
+        child.species     = first.species
+        child.generation  = max(parent.generation or 0 for parent in parents) + 1
+        child.parents     = [parent.name for parent in parents]
+        unique_parents    = {id(parent): parent for parent in parents}
+        for parent in unique_parents.values():
+            parent.children = (parent.children or 0) + 1
+        return child
 
     # Metadata fields, see proto/individual.proto for the authoritative documentation.
 
@@ -321,78 +346,10 @@ class Individual:
         "This individual's genetic data, an immutable byte array")
 
     epigenome = _blob_field("epigenome",
-        "This individual's epigenetic data, a byte array")
+        "This individual's epigenetic data, a mutable byte array")
 
     phenome = _blob_field("phenome",
         "This individual's phenotype, the data which is sent to the controller")
-
-    def get_custom_score(self, score_function="score") -> float:
-        """
-        Apply a custom scoring function to this individual.
-
-        Argument score_function must be one of the following:
-            * A callable function: f(individual) -> float,
-            * The word "score",
-            * The word "ascension",
-            * A key in the individual's telemetry dictionary. The corresponding
-              value will be converted into a float.
-
-        A score of None is converted into negative infinity.
-        """
-        if callable(score_function):
-            score = score_function(self)
-        elif not score_function or score_function == "score":
-            score = self.score
-        elif score_function == "ascension":
-            score = self.ascension
-        elif score_function in self.telemetry:
-            score = self.telemetry[score_function]
-        else:
-            raise ValueError("unrecognized score function " + repr(score_function))
-        if score is None:
-            score = -math.inf
-        return float(score)
-
-    # Reproduction
-
-    def asex(self, child_genome: bytes) -> "Individual":
-        """
-        Asexually reproduce this individual.
-
-        Returns the child, which inherits this individual's environment, body
-        type, controller, and species. This also counts the child in this
-        individual's `children`.
-        """
-        return type(self).sex([self], child_genome)
-
-    @classmethod
-    def sex(cls, parents, child_genome: bytes) -> "Individual":
-        """
-        Sexually reproduce the given individuals.
-
-        Argument parents is a list of Individuals. The child inherits its
-        environment, body type, controller, and species from the first parent,
-        and is one generation older than its oldest parent. Parents are
-        recorded in the order given, which may include repeats. Each distinct
-        parent counts the child once in its `children`.
-
-        Returns the child.
-        """
-        parents = list(parents)
-        if not parents:
-            raise ValueError("at least one parent is required")
-        if not all(isinstance(parent, Individual) for parent in parents):
-            raise TypeError("parents must be Individuals")
-        first = parents[0]
-        child = cls(first.environment or "", first.body_type or "", first.controller, child_genome)
-        child.environment = first.environment
-        child.body_type   = first.body_type
-        child.species     = first.species
-        child.generation  = max(parent.generation or 0 for parent in parents) + 1
-        child.parents     = [parent.name for parent in parents]
-        for parent in {id(parent): parent for parent in parents}.values():
-            parent.children = (parent.children or 0) + 1
-        return child
 
     # Persistence
 
@@ -411,10 +368,9 @@ class Individual:
         Returns the path of the directory containing the individual's files,
         which is the argument to `load()`.
         """
-        name = _check_name(self.name)
         path = Path(path)
         path.mkdir(exist_ok=True)
-        directory = path.joinpath(name)
+        directory = path.joinpath(self.name)
         directory.mkdir()  # Do not allow overwrite
         try:
             metadata = json_format.MessageToJson(

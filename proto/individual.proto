@@ -27,6 +27,10 @@ Metadata for an Individual
 message Metadata {
   /*
   UUID of this individual
+
+  Typically, this will be a 128 bit random number as 32 uppercase hex digits
+  (UUID-4), but technically it can be any string that us universally unique
+  among all individuals.
   */
   string name = 1 [
     json_name = "name"
