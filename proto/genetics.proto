@@ -5,12 +5,13 @@ import "individual.proto";
 package genetics;
 
 /*
-
-The word "**genome**" refers to a complete
-set of parameters for creating an AI agent's control system. Each individual
-has exactly one immutable genome
+The purpose of the genetic service is to handle all genetic material.
 
 Genomes are treated as opaque binary objects outside of genetic algorithms.
+
+The _genome_ refers to a complete set of parameters for creating an AI
+agent's control system. Each individual has exactly one immutable genome.
+
 Genomes are converted into "**phenomes**" before transmission to controllers.
 This decouples the genetic representation from the control system implementation.
 

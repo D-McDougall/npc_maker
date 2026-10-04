@@ -23,7 +23,6 @@ service Evolution {
   rpc Death(DeathRequest) returns (DeathResponse);
 }
 
-// Empty
 message SpawnRequest {
 }
 
@@ -35,6 +34,5 @@ message DeathRequest {
   individual.Individual individual = 1;
 }
 
-// Empty
 message DeathResponse {
 }

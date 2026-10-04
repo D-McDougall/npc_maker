@@ -8,21 +8,125 @@ import "google/protobuf/timestamp.proto";
 /*
 Individuals are the entities that evolve
 
+# File Format
+
 The file format for an individual consists of a directory named after the
-individual's name, located beneath the directory supplied to `save()`. The
-directory contains four files: metadata.json, which contains the individual's
-metadata serialized using the protobuf JSON mapping, and genome, epigenome,
-and phenome, which contain the corresponding data as raw binary.
+individual's name. The directory contains four files: metadata.json, which
+contains the individual's metadata serialized using the protobuf JSON mapping,
+and genome, epigenome, and phenome, which contain the corresponding data as raw
+binary.
+
+# Lifecycle
+
+There are several pathways to creating individuals, depending on how the
+environment requests them, and whether a genetic algorithm is specified.
+
+## Spawn Sequence
+
+1) The environment requests a new individual from the router via
+`environment.Environment::Spawn()`.
+
+2) The router requests parents from the evolution service via
+`evolution.Evolution::Spawn()`.
+
+3) The router forwards the parents to the genetic service via
+`genetics.Genetics::Reproduce()`. The genetic service creates a new Individual
+and returns it to the router.
+
+4) The router sends the Individual to the environment. The router also keeps a
+copy of the individual locally.
+
+## Mate Sequence
+
+1) The environment requests to mate some individuals via
+`environment.Environment::Mate()`. Parents are specified by name, and the
+router will have copies of the individuals on hand while they are alive in the
+enviroment.
+
+3) The router forwards the given parents to the genetic service via
+`genetics.Genetics::Reproduce()`. The genetic service creates a new Individual
+and returns it to the router.
+
+4) The router sends the Individual to the environment. The router also keeps a
+copy of the individual locally.
+
+## Replay Sequence
+
+This sequence resurrects dead Individuals, for example to recreate the best
+performing individuals from a leaderboard. See program `npc-player` for more
+information about using this sequence.
+
+1) The environment requests a new Individual via either the spawn or mate
+sequence.
+
+2) The router requests an Individual from the evolution service via
+`evolution.Evolution::Spawn()`. The first parent is used, the remaining parents
+are discarded. At least one parent must be returned.
+
+3) The router sends the Individual to the environment. The router also keeps a
+copy of the individual locally.
+
+## Life Sequence
+
+1) The environment requests a new Individual via either the spawn or mate
+sequence. The router may choose to ignore mate requests and return a spawned or
+replayed individual instead.
+
+2) The environment synchronizes their copy of the Individual with the router via
+* `environment.Environment::Telemetry()`
+* `environment.Environment::Epigenome()`
+* `environment.Environment::Score()`
+
+3) The environment declares the Individual dead via
+`environment.Environment::Death()`.
+
+4) The router sends its copy of the Individual to the evolution service via
+`evolution.Evolution::Death()`.
+
+## Field Ownership
+
+| Field | Set By | When |
+| ----- | ------ | ---- |
+| `metadata.name` | Genetics | At creation |
+| `metadata.score` |  |  |
+
+
+
 */
 message Individual {
+  /*
+  The metadata contains all human-readable / non-genetic information about the
+  individual.
+
+  This field is required.
+  */
   Metadata metadata = 1;
+
+  /*
+  */
   optional bytes genome = 2;
+
+  /*
+  The epigenome is created by the controller.
+
+  The purpose of the epigenome is to allow self-modifying controllers to persist
+  their modifications over reproductive cycles.
+  */
   optional bytes epigenome = 3;
+
+  /*
+  The phenome is sent to the controller.
+
+  The purpose of the phenome is to simplify the controller's design, by allowing
+  the genetic module to reformat the genome before transmission.
+  */
   optional bytes phenome = 4;
 }
 
 /*
 Metadata for an Individual
+
+This contains the individual's human readable data.
 */
 message Metadata {
   /*
@@ -31,6 +135,8 @@ message Metadata {
   Typically, this will be a 128 bit random number as 32 uppercase hex digits
   (UUID-4), but technically it can be any string that us universally unique
   among all individuals.
+
+  Name must be a valid file system directory name.
   */
   string name = 1 [
     json_name = "name"
@@ -44,7 +150,7 @@ message Metadata {
   ];
 
   /*
-  Name of the body type used by this individual
+  Name of the body type used by this individual.
   */
   optional string body_type = 3 [
     json_name = "body_type"
@@ -58,7 +164,11 @@ message Metadata {
   ];
 
   /*
-  Reproductive fitness of this individual, as assessed by the environment
+  Reproductive fitness of this individual, as assessed by the environment.
+
+  Higher is better.
+
+  Unset values are translated to -∞.
   */
   optional double score = 5 [
     json_name = "score"
@@ -93,28 +203,41 @@ message Metadata {
   ];
 
   /*
-  Number of generations that came before this individual
+  Number of generations that came before this individual.
+
+  This is the lineage depth, which is defined recursively as the oldest parent's
+  generation plus one, with 0 for founders.
   */
   optional uint64 generation = 10 [
     json_name = "generation"
   ];
 
   /*
-  Number of individuals who died before this one
+  Number of individuals who died before this one.
+
+  This is 0-based and counted separately for each body type.
+
+  The Evolution service assigns this.
   */
   optional uint64 ascension = 11 [
     json_name = "ascension"
   ];
 
   /*
-  UTC time at which this individual was born
+  UTC time at which this individual was born.
+
+  This is assigned by the router program, immediately before sending the
+  individual to the environment.
   */
   optional google.protobuf.Timestamp birth_date = 12 [
     json_name = "birth_date"
   ];
 
   /*
-  UTC time at which this individual died
+  UTC time at which this individual died.
+
+  This is assigned by the router program, immediately after receiving the
+  corresponding death message.
   */
   optional google.protobuf.Timestamp death_date = 13 [
     json_name = "death_date"
