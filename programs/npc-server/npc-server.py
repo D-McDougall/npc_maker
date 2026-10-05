@@ -1,83 +1,297 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-Simplified router program for testing and debugging the NPC Maker
+Run the NPC Maker experiment router.
+
+The server is the synchronous, single-threaded MVP router between an
+independent environment and the Evolution and Genetics services configured by
+an Experiment JSON file.
 """
 
-from npc_maker.exp import Experiment
-from npc_maker.env import Environment
-from npc_maker.individual import Individual
-from npc_maker.evo import Evolution
-from npc_maker.gen import Genetics
-from os import chdir
 import argparse
-import time
+import json
+import socket
+import subprocess
 import sys
+from concurrent import futures
+from pathlib import Path
+
+import grpc
+from google.protobuf import json_format
+from google.protobuf.timestamp_pb2 import Timestamp
+
+from npc_maker import environment_pb2, environment_pb2_grpc
+from npc_maker import experiment_pb2
+from npc_maker import evolution_pb2, evolution_pb2_grpc
+from npc_maker import genetics_pb2, genetics_pb2_grpc
+from npc_maker import individual_pb2
+
+
+class ServiceProcess:
+    """A configured local gRPC service and its subprocess."""
+
+    def __init__(self, command, stub_class, host, port, cwd=None):
+        command = list(command)
+        if not command:
+            raise ValueError("empty service command")
+
+        if cwd is not None:
+            Path(cwd).mkdir(parents=True, exist_ok=True)
+
+        # npc-evo accepts --listen HOST:PORT. The same convention is used by
+        # future local services launched by npc-server.
+        command += ["--listen", f"{host}:{port}"]
+        self.process = subprocess.Popen(command, cwd=cwd)
+        self.channel = grpc.insecure_channel(f"{host}:{port}")
+        self.stub = stub_class(self.channel)
+
+    def close(self):
+        self.channel.close()
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
+
+class Router(environment_pb2_grpc.EnvironmentServicer):
+    """Implementation of the Environment-facing router API."""
+
+    def __init__(self, config):
+        self.config = config
+        self.persistence = Path(config.persistence_directory)
+        self.persistence.mkdir(parents=True, exist_ok=True)
+        self.living = {}
+        self.evolution = {}
+        self.genetics = {}
+        self.processes = []
+        self.server = None
+        self.failed = False
+
+        self.organisms = {
+            organism.body_type: organism
+            for organism in config.organisms
+        }
+
+        for body_type, organism in self.organisms.items():
+            evolution = list(organism.evolution) or list(config.evolution)
+            genetics = list(organism.genetics) or list(config.genetics)
+
+            if evolution:
+                port = _free_port()
+                service = ServiceProcess(
+                    evolution, evolution_pb2_grpc.EvolutionStub,
+                    "127.0.0.1", port,
+                    cwd=self.persistence / f"{body_type}-evolution")
+                self.evolution[body_type] = service.stub
+                self.processes.append(service)
+
+            if genetics:
+                port = _free_port()
+                service = ServiceProcess(
+                    genetics, genetics_pb2_grpc.GeneticsStub,
+                    "127.0.0.1", port,
+                    cwd=self.persistence / f"{body_type}-genetics")
+                self.genetics[body_type] = service.stub
+                self.processes.append(service)
+
+    def _organism(self, body_type):
+        try:
+            return self.organisms[body_type]
+        except KeyError:
+            raise ValueError(f'unknown body type "{body_type}"')
+
+    @staticmethod
+    def _timestamp():
+        timestamp = Timestamp()
+        timestamp.GetCurrentTime()
+        return timestamp
+
+    def _set_defaults(self, individual, organism):
+        if not individual.metadata.body_type:
+            individual.metadata.body_type = organism.body_type
+        controller = list(organism.controller) or list(self.config.controller)
+        if not individual.metadata.controller and controller:
+            individual.metadata.controller.extend(controller)
+
+    def _fatal(self, error):
+        self.failed = True
+        print(f"npc-server: downstream service failure: {error}", file=sys.stderr)
+        if self.server is not None:
+            self.server.stop(0)
+
+    def _call(self, call, request):
+        try:
+            return call(request)
+        except grpc.RpcError as error:
+            self._fatal(error)
+            raise
+
+    def _save(self, individual):
+        path = self.persistence / individual.metadata.name
+        if path.exists():
+            from npc_maker.individual import Individual
+            Individual.delete(path)
+        from npc_maker.individual import Individual
+        Individual.from_proto(individual).save(self.persistence)
+
+    def Spawn(self, request, context):
+        organism = self._organism(request.body_type)
+        parents = []
+
+        if request.body_type in self.evolution:
+            response = self._call(
+                self.evolution[request.body_type].Spawn,
+                evolution_pb2.SpawnRequest())
+            parents = list(response.parents)
+
+        if request.body_type in self.genetics:
+            response = self._call(
+                self.genetics[request.body_type].Reproduce,
+                genetics_pb2.ReproduceRequest(parents=parents))
+            child = response.child
+        elif parents:
+            from npc_maker.individual import Individual
+            parent = Individual.from_proto(parents[0])
+            child = Individual.reproduce([parent]).to_proto()
+            child.genome = parents[0].genome
+        else:
+            raise RuntimeError(
+                f'cannot spawn body type "{request.body_type}": '
+                "no genetics service and no parent was selected")
+
+        self._set_defaults(child, organism)
+        child.metadata.birth_date.CopyFrom(self._timestamp())
+        self.living[child.metadata.name] = child
+        self._save(child)
+        return child
+
+    def Mate(self, request, context):
+        if not request.parents:
+            raise ValueError("at least one parent is required")
+
+        parents = []
+        for name in request.parents:
+            try:
+                parents.append(self.living[name])
+            except KeyError:
+                raise ValueError(f'unknown living individual "{name}"')
+
+        body_type = parents[0].metadata.body_type
+        organism = self._organism(body_type)
+
+        if body_type in self.genetics:
+            child = self._call(
+                self.genetics[body_type].Reproduce,
+                genetics_pb2.ReproduceRequest(parents=parents)).child
+        else:
+            from npc_maker.individual import Individual
+            child = Individual.reproduce([
+                Individual.from_proto(parent) for parent in parents
+            ]).to_proto()
+            child.genome = parents[0].genome
+
+        self._set_defaults(child, organism)
+        child.metadata.birth_date.CopyFrom(self._timestamp())
+        self.living[child.metadata.name] = child
+        self._save(child)
+        return child
+
+    def Score(self, request, context):
+        individual = self._living(request.name)
+        individual.metadata.score = request.score
+        self._save(individual)
+        return environment_pb2.ScoreResponse()
+
+    def Telemetry(self, request, context):
+        individual = self._living(request.name)
+        for item in request.data:
+            individual.metadata.telemetry[item.key] = item.value
+        self._save(individual)
+        return environment_pb2.TelemetryResponse()
+
+    def Epigenome(self, request, context):
+        individual = self._living(request.name)
+        for item in request.data:
+            # The current environment API exposes epigenome data as key/value
+            # strings, while Individual stores it as opaque bytes. Preserve the
+            # request for now in metadata.extra.
+            individual.metadata.extra[f"epigenome.{item.key}"] = item.value
+        self._save(individual)
+        return environment_pb2.EpigenomeResponse()
+
+    def Death(self, request, context):
+        individual = self._living(request.name)
+        individual.metadata.death_date.CopyFrom(self._timestamp())
+        body_type = individual.metadata.body_type
+
+        if body_type in self.evolution:
+            self._call(
+                self.evolution[body_type].Death,
+                evolution_pb2.DeathRequest(individual=individual))
+
+        path = self.persistence / individual.metadata.name
+        from npc_maker.individual import Individual
+        Individual.delete(path)
+        del self.living[request.name]
+        return environment_pb2.DeathResponse()
+
+    def _living(self, name):
+        try:
+            return self.living[name]
+        except KeyError:
+            raise ValueError(f'unknown living individual "{name}"')
+
+    def close(self):
+        for process in reversed(self.processes):
+            process.close()
+
+
+def _free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def load_config(path):
+    with open(path, "rt", encoding="utf-8") as file:
+        data = json.load(file)
+    return json_format.ParseDict(data, experiment_pb2.Experiment())
+
 
 def main():
-    parser = argparse.ArgumentParser(prog='npc-server.py', description=__doc__)
-    parser.add_argument('filename', help='experiment file (.exp)')
+    parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
+    parser.add_argument("filename", help="experiment configuration (JSON)")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="address on which to serve the environment API")
+    parser.add_argument("--port", type=int, default=47000,
+                        help="port on which to serve the environment API")
     args = parser.parse_args()
 
     try:
-        config = Experiment(args.filename)
+        config = load_config(args.filename)
+        router = Router(config)
     except Exception as error:
-        print(f"{type(error).__name__} in \"{args.filename}\": {error}", file=sys.stderr)
-        exit(5)
+        print(f"{type(error).__name__}: {error}", file=sys.stderr)
+        return 5
 
-    chdir(config.path.parent)
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    environment_pb2_grpc.add_EnvironmentServicer_to_server(router, server)
+    server.add_insecure_port(f"{args.host}:{args.port}")
+    router.server = server
 
-    # Start one instance of the environment
-    env = Environment(*config.environment, "graphical")
+    try:
+        server.start()
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop(0).wait()
+        router.close()
 
-    # Start genetic and evolution programs
-    evo = {}
-    gen = {}
-    for organism in config.organisms:
-        evo[organism.body_type] = Evolution(organism.evolution)
-        gen[organism.body_type] = Genetics(organism.genetics)
-
-    # Main loop
-    while True:
-        message = env.poll()
-        if message is None:
-            time.sleep(0) # Yield thread
-        elif "Spawn" in message:
-            body_type = message["Spawn"]
-            parent = evo[body_type].spawn()
-            genome, phenome = gen[body_type].asex(parent)
-            individual = parent.asex(genome)
-            env.birth(individual, phenome)
-        elif "Death" in message:
-            individual = message["Death"]
-            evo[individual.get_body_type()].death(individual)
-        else:
-            raise ValueError(f'unrecognized message "{message}"')
-
-if __name__ == "__main__":
-    main()
-
-
-
-
-import logging
-
-import grpc
-import helloworld_pb2
-import helloworld_pb2_grpc
-
-
-def run():
-    # NOTE(gRPC Python Team): .close() is possible on a channel and should be
-    # used in circumstances in which the with statement does not fit the needs
-    # of the code.
-    print("Will try to greet world ...")
-    with grpc.insecure_channel("localhost:50051") as channel:
-        stub = helloworld_pb2_grpc.GreeterStub(channel)
-        response = stub.SayHello(helloworld_pb2.HelloRequest(name="you"))
-    print("Greeter client received: " + response.message)
+    return 1 if router.failed else 0
 
 
 if __name__ == "__main__":
-    logging.basicConfig()
-    run()
-
+    sys.exit(main())
