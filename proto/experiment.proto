@@ -13,30 +13,26 @@ message Experiment {
   string description = 2;
 
   /*
+  Command line invocation for the environment program
   */
-  string persistence_directory = 3;
-
-  /*
-  Command line invocation for the environment client
-  */
-  repeated string environment = 4;
-
-  /*
-  Default controller service (command line invocation)
-  */
-  repeated string controller = 5;
+  repeated string environment = 3;
 
   /*
   Default evolution service (command line invocation)
   */
-  repeated string evolution = 6;
+  repeated string evolution = 4;
 
   /*
   Default genetics service (command line invocation)
   */
-  repeated string genetics = 7;
+  repeated string genetics = 5;
 
-  repeated Organism organisms = 8;
+  /*
+  Default controller service (command line invocation)
+  */
+  repeated string controller = 6;
+
+  repeated Organism organisms = 7;
 }
 
 message Organism {
