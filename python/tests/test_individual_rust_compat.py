@@ -18,7 +18,7 @@ import pytest
 grpc = pytest.importorskip("grpc")
 
 import npc_maker
-from npc_maker._protobuf import evolution_pb2, evolution_pb2_grpc, individual_pb2
+from npc_maker import evolution_pb2, evolution_pb2_grpc, individual_pb2
 from npc_maker.individual import Individual
 
 

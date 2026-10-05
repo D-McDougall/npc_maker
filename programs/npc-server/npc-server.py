@@ -3,7 +3,6 @@
 Simplified router program for testing and debugging the NPC Maker
 """
 
-from npc_maker.utils import eprint
 from npc_maker.exp import Experiment
 from npc_maker.env import Environment
 from npc_maker.individual import Individual
@@ -12,6 +11,7 @@ from npc_maker.gen import Genetics
 from os import chdir
 import argparse
 import time
+import sys
 
 def main():
     parser = argparse.ArgumentParser(prog='npc-server.py', description=__doc__)
@@ -21,7 +21,7 @@ def main():
     try:
         config = Experiment(args.filename)
     except Exception as error:
-        eprint(f"{type(error).__name__} in \"{args.filename}\": {error}")
+        print(f"{type(error).__name__} in \"{args.filename}\": {error}", file=sys.stderr)
         exit(5)
 
     chdir(config.path.parent)

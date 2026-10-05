@@ -1,6 +1,6 @@
 PROTO_DIR  	:= proto
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
-PYTHON_OUT 	:= python/npc_maker/_protobuf
+PYTHON_OUT 	:= python/npc_maker/
 PYTHON  	:= venv/bin/python
 PIP 		:= venv/bin/pip
 
@@ -14,10 +14,6 @@ venv:
 	$(PIP) install build twine pytest # Python development dependencies
 
 python: venv
-	# Setup python module for protobuf generated file
-	mkdir -p $(PYTHON_OUT)
-	touch $(PYTHON_OUT)/__init__.py
-	echo "*" > $(PYTHON_OUT)/.gitignore
 	# Run protobuf
 	$(PYTHON) -m grpc_tools.protoc \
 		-I$(PROTO_DIR) \
@@ -50,8 +46,9 @@ install: package
 	$(PIP) install --force-reinstall dist/npc_maker-*.whl
 
 clean:
-	rm -rf $(PYTHON_OUT) 	  # protobuf
-	rm -rf rust/src/generated # protobuf
+	rm -rf $(PYTHON_OUT)/*_pb2.py 	  	# protobuf
+	rm -rf $(PYTHON_OUT)/*_pb2_grpc.py 	# protobuf
+	rm -rf rust/src/generated 			# protobuf
 	rm -rf build # python
 	rm -rf dist  # python
 	rm  -rf python/npc_maker.egg-info # python

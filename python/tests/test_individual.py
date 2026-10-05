@@ -431,10 +431,14 @@ def test_reproduce_validates_parents():
 
 def test_equality_with_other_types():
     individual = Individual()
-    assert individual != 5
-    assert not (individual == "text")
-    assert individual not in [None, 5, "text"]
-    assert individual in [None, individual]
+    with pytest.raises(TypeError, match="invalid comparison"):
+        individual != 5
+    with pytest.raises(TypeError, match="invalid comparison"):
+        not (individual == "text")
+    with pytest.raises(TypeError, match="invalid comparison"):
+        individual not in [None, 5, "text"]
+    with pytest.raises(TypeError, match="invalid comparison"):
+        individual in [None, individual]
 
 
 def test_get_custom_score():

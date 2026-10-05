@@ -36,7 +36,7 @@ from pathlib import Path
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ._protobuf import individual_pb2
+from . import individual_pb2
 
 __all__ = (
     "Individual",
