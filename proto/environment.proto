@@ -29,15 +29,7 @@ message ScoreRequest {
   double score = 2;
 }
 
-// Empty
 message ScoreResponse {
-}
-
-/*
-*/
-message KeyValue {
-  string key = 1;
-  string value = 2;
 }
 
 message TelemetryRequest {
@@ -56,6 +48,13 @@ message EpigenomeRequest {
 
 // Empty
 message EpigenomeResponse {
+}
+
+/*
+*/
+message KeyValue {
+  string key = 1;
+  string value = 2;
 }
 
 /*

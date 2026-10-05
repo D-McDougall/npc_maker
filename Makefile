@@ -11,7 +11,7 @@ all: package
 venv:
 	test -d venv || $(PYTHON) -m venv venv # Create venv if it doesn't exist
 	$(PIP) install -r requirements.txt
-	$(PIP) install build twine
+	$(PIP) install build twine pytest # Python development dependencies
 
 python: venv
 	# Setup python module for protobuf generated file

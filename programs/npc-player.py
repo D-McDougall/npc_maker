@@ -1,106 +1,182 @@
 """
-Evolutionary algorithms and supporting tools.
+Replay previously saved individuals through the Evolution gRPC service.
+
+The player presents a saved population through the Evolution API. Each Spawn
+request selects one saved individual according to the configured score function
+and mate-selection algorithm, and then returns a copy of that individual.
+
+The Death RPC is intentionally a no-op: replayed individuals already lived and
+their death does not change the replay population.
 """
 
-from npc_maker.individual import Individual
-from npc_maker.evo import API, eprint
+# Standard Library
+from concurrent import futures
 from pathlib import Path
-import json
-import math
-import os
-import os.path
-import tempfile
+import argparse
+import logging
 import threading
 
-def _scan_dir(path):
-    """
-    Find saved individuals in the given directory.
-    """
-    path = Path(path)
-    for file in path.iterdir():
-        if file.suffix.lower() == ".indiv":
-            yield file
+# Third Party
+import grpc
 
-class Player(API):
+# First Party
+from npc_maker._protobuf import evolution_pb2
+from npc_maker._protobuf import evolution_pb2_grpc
+from npc_maker.individual import Individual
+import mate_selection
+
+
+class Player(evolution_pb2_grpc.EvolutionServicer):
     """
-    Replay saved individuals
+    Evolution service which replays a population of saved Individuals.
     """
-    def __init__(self, genome_cls, path, select="Random", score="score"):
+
+    def __init__(self, path, selection):
+        self._path = Path(path)
+        self._lock = threading.RLock()
+
+        self._select = mate_selection.parse(selection)
+
+        # Paths to saved individuals.  These run parallel to _scores.
+        self._members = []
+        self._scores = []
+
+        # Individuals selected by the selection algorithm but not yet spawned.
+        self._buffer = []
+
+        # Used to detect changes to the replay population.
+        self._scan_time = None
+
+    def Spawn(self, request, context):
         """
-        Argument path is the directory containing the saved individuals.
-                 Individuals must have the file extension ".json"
-
-        Argument select is a mate selection algorithm.
-
-        Argument score is an optional custom scoring function.
-        """
-        self._genome_cls    = genome_cls
-        self._path          = Path(path)
-        self._lock          = threading.RLock()
-        self._select        = select
-        self._score         = score
-        self._scan_time     = -1
-        self._members       = []
-        self._scores        = [] # Runs parallel to the members list.
-        self._buffer        = [] # Queue of selected individuals wait to be born.
-
-    def get_members(self):
-        """
-        Returns a list of individuals.
+        Select and return one saved Individual.
         """
         with self._lock:
             self._scan()
-            return list(self._members)
 
-    def spawn(self):
-        with self._lock:
-            self._scan()
+            if not self._members:
+                context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "replay population is empty",
+                )
+
             if not self._buffer:
-                buffer_size = len(self._members)
-                indices = self._select.select(buffer_size, self._scores)
-                self._buffer.extend(self._members[i] for i in indices)
-            individual = self._buffer.pop()
-        # Reload into a new instance for the environment to modify.
-        return Individual.load(individual.get_path())
+                indices = self._select.select(len(self._members), self._scores)
+                self._buffer.extend(self._members[index] for index in indices)
 
-    def death(self, individual):
-        pass
+            path = self._buffer.pop()
+
+        return Individual.load(path).to_proto()
+
+    def Death(self, request, context):
+        """
+        Discard the individual. The replayer does not modify the population.
+        """
+        return evolution_pb2.DeathResponse()
 
     def _scan(self):
-        if self._scan_time == os.path.getmtime(self._path):
+        """
+        Update the population if the replay directory has changed.
+        """
+        scan_time = self._path.stat().st_mtime_ns
+
+        if scan_time == self._scan_time:
             return
-        self._members = [Individual.load(file)
-                         for file in _scan_dir(self._path)]
-        self._scores = [individual.get_custom_score(self._score)
-                        for individual in self._members]
+
+        metadata = Individual.load_dir(self._path)
+
+        self._members = [
+            self._path / message.name
+            for message in metadata
+        ]
+
+        self._scores = [
+            float(message.score) if message.HasField("score") else float("-inf")
+            for message in metadata
+        ]
+
+        # A changed population invalidates selections made from the old one.
         self._buffer = []
-        self._scan_time = os.path.getmtime(self._path)
+        self._scan_time = scan_time
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Replay saved NPC Maker individuals through gRPC."
+    )
 
-from concurrent import futures
-import logging
+    parser.add_argument(
+        "directory",
+        type=Path,
+        help="directory containing saved Individual directories",
+    )
 
-import grpc
-import helloworld_pb2
-import helloworld_pb2_grpc
+    parser.add_argument(
+        "selection",
+        help=(
+            "mate selection specification, such as 'random', "
+            "'proportional', or 'best=10'"
+        ),
+    )
+
+    parser.add_argument(
+        "--host",
+        default="[::]",
+        help="gRPC listen address (default: [::])",
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=50051,
+        help="gRPC listen port (default: 50051)",
+    )
+
+    return parser.parse_args()
 
 
-class Greeter(helloworld_pb2_grpc.GreeterServicer):
-    def SayHello(self, request, context):
-        return helloworld_pb2.HelloReply(message="Hello, %s!" % request.name)
+def serve(directory, selection, host, port):
+    player = Player(directory, selection)
 
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=10)
+    )
 
-def serve():
-    port = "50051"
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    helloworld_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
-    server.add_insecure_port("[::]:" + port)
+    evolution_pb2_grpc.add_EvolutionServicer_to_server(
+        player,
+        server,
+    )
+
+    address = f"{host}:{port}"
+    server.add_insecure_port(address)
+
     server.start()
-    print("Server started, listening on " + port)
+
+    logging.info("NPC player listening on %s", address)
+    logging.info("Replay population: %s", directory)
+    logging.info("Mate selection: %s", selection)
+
     server.wait_for_termination()
 
 
+def main():
+    args = parse_args()
+
+    if not args.directory.is_dir():
+        raise SystemExit(
+            f"replay directory does not exist or is not a directory: "
+            f"{args.directory}"
+        )
+
+    logging.basicConfig(level=logging.INFO)
+
+    serve(
+        args.directory,
+        args.selection,
+        args.host,
+        args.port,
+    )
+
+
 if __name__ == "__main__":
-    logging.basicConfig()
-    serve()
+    main()

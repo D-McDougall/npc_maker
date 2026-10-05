@@ -36,12 +36,7 @@ from pathlib import Path
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
-try:
-    from ._protobuf import individual_pb2
-except ImportError as error:  # pragma: no cover
-    raise ImportError(
-        "the protobuf modules of the NPC Maker have not been generated, run `make python`"
-    ) from error
+from ._protobuf import individual_pb2
 
 __all__ = (
     "Individual",
