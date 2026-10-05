@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package experiment;
+
+/*
+The experiment message defines the semantics of a complete artificial-life
+experiment.
+*/
+message Experiment {
+
+  string name = 1;
+
+  string description = 2;
+
+  /*
+  */
+  string persistence_directory = 3;
+
+  /*
+  Command line invocation for the environment client
+  */
+  repeated string environment = 4;
+
+  /*
+  Default controller service (command line invocation)
+  */
+  repeated string controller = 5;
+
+  /*
+  Default evolution service (command line invocation)
+  */
+  repeated string evolution = 6;
+
+  /*
+  Default genetics service (command line invocation)
+  */
+  repeated string genetics = 7;
+
+  repeated Organism organisms = 8;
+}
+
+message Organism {
+
+  string body_type = 1;
+
+  optional string description = 2;
+
+  /*
+  Command line invocation for this organism's control system service.
+  */
+  repeated string controller = 3;
+
+  /*
+  Command line invocation for this organism's evolution service.
+
+  If missing then all spawn requests will create founder individuals, by sending
+  zero parents to the genetic service.
+
+  Each instance of the evolution service is assigned a subdirectory in the
+  persistence_directory, which it uses as its initial working directory.
+  */
+  repeated string evolution = 4;
+
+  /*
+  Command line invocation for this organism's genetics service.
+
+  If missing then the npc-server will use the first parent's genetic material,
+  as returned by the evolution service.
+
+  Each instance of the genetics service is assigned a subdirectory in the
+  persistence_directory, which it uses as its initial working directory.
+  */
+  repeated string genetics = 5;
+}
