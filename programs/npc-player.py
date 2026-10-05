@@ -26,16 +26,39 @@ from npc_maker.individual import Individual
 import mate_selection
 
 
+def _score(metadata, field):
+    """
+    Return the score for a saved individual's metadata.
+
+    A Metadata field is preferred over telemetry. Lambda expressions are
+    evaluated with the metadata message as their sole argument.
+    """
+    if field.startswith("lambda"):
+        return float(eval(field)(metadata))
+
+    descriptor = metadata.DESCRIPTOR.fields_by_name
+    if field in descriptor:
+        if descriptor[field].has_presence and not metadata.HasField(field):
+            return float("-inf")
+        return float(getattr(metadata, field))
+
+    if field in metadata.telemetry:
+        return float(metadata.telemetry[field])
+
+    raise ValueError(f"unrecognized score field {field!r}")
+
+
 class Player(evolution_pb2_grpc.EvolutionServicer):
     """
     Evolution service which replays a population of saved Individuals.
     """
 
-    def __init__(self, path, selection):
+    def __init__(self, path, selection, score):
         self._path = Path(path)
         self._lock = threading.RLock()
 
         self._select = mate_selection.parse(selection)
+        self._score = score
 
         # Paths to saved individuals.  These run parallel to _scores.
         self._members = []
@@ -91,7 +114,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         ]
 
         self._scores = [
-            float(message.score) if message.HasField("score") else float("-inf")
+            _score(message, self._score)
             for message in metadata
         ]
 
@@ -120,6 +143,15 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--score",
+        default="score",
+        help=(
+            "field used to score individuals (default: score); "
+            "metadata fields, telemetry keys, or a lambda expression"
+        ),
+    )
+
+    parser.add_argument(
         "--host",
         default="[::]",
         help="gRPC listen address (default: [::])",
@@ -135,8 +167,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def serve(directory, selection, host, port):
-    player = Player(directory, selection)
+def serve(directory, selection, score, host, port):
+    player = Player(directory, selection, score)
 
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10)
@@ -155,6 +187,7 @@ def serve(directory, selection, host, port):
     logging.info("NPC player listening on %s", address)
     logging.info("Replay population: %s", directory)
     logging.info("Mate selection: %s", selection)
+    logging.info("Score: %s", score)
 
     server.wait_for_termination()
 
@@ -173,6 +206,7 @@ def main():
     serve(
         args.directory,
         args.selection,
+        args.score,
         args.host,
         args.port,
     )
