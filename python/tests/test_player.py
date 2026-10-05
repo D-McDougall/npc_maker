@@ -52,7 +52,7 @@ def player_server(directory, selection="random"):
 
     try:
         try:
-            grpc.channel_ready_future(channel).result(timeout=1)
+            grpc.channel_ready_future(channel).result(timeout=10)
         except grpc.FutureTimeoutError:
             stdout, stderr = process.communicate(timeout=1)
             pytest.fail(

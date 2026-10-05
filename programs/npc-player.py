@@ -66,7 +66,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
 
             path = self._buffer.pop()
 
-        return Individual.load(path).to_proto()
+        return evolution_pb2.SpawnResponse(parents=[Individual.load(path).to_proto()])
 
     def Death(self, request, context):
         """
