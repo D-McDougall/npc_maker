@@ -2,7 +2,7 @@
 Evolutionary algorithms and supporting tools.
 """
 
-from npc_maker.indiv import Individual
+from npc_maker.individual import Individual
 from npc_maker.evo import API, eprint
 from pathlib import Path
 import json

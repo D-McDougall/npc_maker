@@ -3,7 +3,7 @@ Genetic Interface - tools for making and using genetic algorithms, which
 analyze and manipulate genetic material
 """
 
-from .indiv import Individual
+from .individual import Individual
 from .utils import eprint, readline, readbytes, _API, _Instance
 from pathlib import Path
 

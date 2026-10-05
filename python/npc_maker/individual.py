@@ -28,7 +28,6 @@ import datetime
 import json
 import math
 import os
-import secrets
 import shlex
 import shutil
 import uuid
@@ -57,6 +56,18 @@ def _uuid4() -> str:
     Generate a universally unique name, format unspecified.
     """
     return str(uuid.uuid4())
+
+
+def _check_name(name: str) -> str:
+    """
+    Individuals are stored in directories which are named after them,
+    so reject names which could refer to anything other than a child directory.
+
+    This is necessary for internet security.
+    """
+    if not name or name in (".", "..") or any(char in name for char in "/\\\0"):
+        raise ValueError(f"invalid individual name {name!r}")
+    return name
 
 
 def _command(command) -> list:
@@ -181,7 +192,7 @@ class Individual:
 
     def __eq__(self, other):
         if not isinstance(other, Individual):
-            return TypeError(
+            raise TypeError(
                 f"invalid comparison between types {type(self).__name__} and {type(other).__name__}")
         return self._message == other._message
 
@@ -222,15 +233,25 @@ class Individual:
 
         Argument parents is a list of Individuals. The child inherits its
         environment, body type, controller, and species from the first parent,
-        and is one generation older than its oldest parent. Parents are
+        and is one generation older than its oldest parent (the parent with the
+        highest generation, where founders are generation zero). Parents are
         recorded in the order given, which may include repeats. Each distinct
         parent counts the child once in its `children`.
 
         Returns the child.
 
+        The child's other fields are unset, in particular it does not inherit the
+        parents' score, telemetry, epigenome, or extra fields. If the first parent
+        has no species then neither does the child.
+
         The caller must set the genome, epigenome, and phenome attributes.
+
+        Raises ValueError if there are no parents, and TypeError if any parent is
+        not an Individual.
         """
         parents = list(parents)
+        if not parents:
+            raise ValueError("at least one parent is required")
         if not all(isinstance(parent, Individual) for parent in parents):
             raise TypeError("parents must be Individuals")
         first = parents[0]
@@ -365,14 +386,17 @@ class Individual:
         for the file format.
 
         Existing individuals are never overwritten, this raises FileExistsError.
-        If an error occurs, then the partially written individual is removed.
+        The individual's name must be a valid directory name, otherwise this
+        raises ValueError before anything is written. If an error occurs while
+        writing, then the partially written individual is removed.
 
         Returns the path of the directory containing the individual's files,
         which is the argument to `load()`.
         """
+        name = _check_name(self.name)
         path = Path(path)
         path.mkdir(exist_ok=True)
-        directory = path.joinpath(self.name)
+        directory = path.joinpath(name)
         directory.mkdir()  # Do not allow overwrite
         try:
             metadata = json_format.MessageToJson(

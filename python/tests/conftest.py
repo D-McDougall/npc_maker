@@ -1,19 +1,27 @@
-# This file appears to be unused.
+# Shared test fixtures, which pytest finds automatically.
 
 import datetime
 
 import pytest
 
-from npc_maker.indiv import Individual
+from npc_maker.individual import Individual
 
 
 @pytest.fixture
 def make_full_individual():
     """
-    Factory for individuals with every field populated
+    Factory for individuals with every field populated.
+
+    Note that `ascension` is assigned by the evolution program when an
+    individual dies, so clear it (`ascension=None`) before sending an
+    individual to the Evolution service's `Death()` method.
     """
     def make(score=42.5, **kwargs):
-        individual = Individual("test-env", "test-body", ["test-ctrl", "--flag"], b"genome data")
+        individual = Individual()
+        individual.environment = "test-env"
+        individual.body_type  = "test-body"
+        individual.controller = ["test-ctrl", "--flag"]
+        individual.genome     = b"genome data"
         individual.score      = score
         individual.ascension  = 88
         individual.telemetry  = {"temperature": "20", "mood": "ok"}

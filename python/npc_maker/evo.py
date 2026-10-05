@@ -3,7 +3,7 @@ Evolution Interface - tools for making and using evolutionary algorithms,
 which decide which individuals to mate together.
 """
 
-from .indiv import Individual
+from .individual import Individual
 from .utils import eprint, writeline, _API, _Instance
 from pathlib import Path
 import json

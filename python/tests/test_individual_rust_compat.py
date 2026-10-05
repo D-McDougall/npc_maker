@@ -19,7 +19,7 @@ grpc = pytest.importorskip("grpc")
 
 import npc_maker
 from npc_maker._protobuf import evolution_pb2, evolution_pb2_grpc, individual_pb2
-from npc_maker.indiv import Individual
+from npc_maker.individual import Individual
 
 
 def _find_npc_evo():
@@ -67,7 +67,7 @@ def evolution_server(directory, *flags):
 
 
 def test_python_reads_what_rust_wrote(tmp_path, make_full_individual):
-    sent = make_full_individual(score=5.0)
+    sent = make_full_individual(score=5.0, ascension=None)
     with evolution_server(tmp_path / "evo") as evolution:
         evolution.Death(evolution_pb2.DeathRequest(individual=sent.to_proto()))
     # Rust assigned the ascension, and saved the individual to its population.
@@ -84,7 +84,7 @@ def test_python_reads_what_rust_wrote(tmp_path, make_full_individual):
 
 
 def test_python_reads_empty_blobs_the_way_rust_wrote_them(tmp_path, make_full_individual):
-    sent = make_full_individual(phenome=None, epigenome=None)
+    sent = make_full_individual(phenome=None, epigenome=None, ascension=None)
     with evolution_server(tmp_path / "evo") as evolution:
         evolution.Death(evolution_pb2.DeathRequest(individual=sent.to_proto()))
     loaded = Individual.load(tmp_path / "evo" / "pop" / sent.name)
@@ -96,7 +96,7 @@ def test_python_reads_empty_blobs_the_way_rust_wrote_them(tmp_path, make_full_in
 def test_rust_reads_what_python_wrote(tmp_path, make_full_individual):
     evo_dir = tmp_path / "evo"
     # Let Rust create its own save directory, with one individual in the population.
-    seed = make_full_individual(score=1.0)
+    seed = make_full_individual(score=1.0, ascension=None)
     with evolution_server(evo_dir) as evolution:
         evolution.Death(evolution_pb2.DeathRequest(individual=seed.to_proto()))
     # Python adds another individual to the population directory.
@@ -123,7 +123,7 @@ def test_rust_reads_non_finite_scores(tmp_path, make_full_individual, score):
     non-finite numbers and so it loses the score.
     """
     evo_dir = tmp_path / "evo"
-    seed = make_full_individual(score=1.0)
+    seed = make_full_individual(score=1.0, ascension=None)
     with evolution_server(evo_dir) as evolution:
         evolution.Death(evolution_pb2.DeathRequest(individual=seed.to_proto()))
     mine = make_full_individual(score=score, ascension=7)
