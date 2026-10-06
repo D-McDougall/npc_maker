@@ -61,7 +61,8 @@ class ServiceProcess(LocalProcess):
         # Note: By convention services accept "--listen HOST:PORT".
         command = [*command, "--listen", f"{host}:{port}"]
         super().__init__(command, cwd)
-        self.channel = grpc.insecure_channel(f"{host}:{port}")
+        self.address = f"{host}:{port}"
+        self.channel = grpc.insecure_channel(self.address)
         self.stub = stub_class(self.channel)
 
     def close(self):
@@ -79,6 +80,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.living = {}
         self.evolution = {}
+        self.evolution_addresses = {}
         self.genetics = {}
         self.processes = []
         self.server = None
@@ -101,6 +103,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                     "127.0.0.1", port,
                     cwd=self.save_dir / f"{body_type}-evolution")
                 self.evolution[body_type] = service.stub
+                self.evolution_addresses[body_type] = service.address
                 self.processes.append(service)
 
             if genetics:
@@ -277,7 +280,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         """
         Start the single environment instance configured by the experiment.
         """
-        self.environment = LocalProcess(self.config.environment)
+        command = list(self.config.environment)
+        if len(self.evolution_addresses) != 1:
+            raise ValueError(
+                "environment requires exactly one Evolution service")
+        command.append(next(iter(self.evolution_addresses.values())))
+        self.environment = LocalProcess(command)
 
     def close(self):
         self.environment.close()
