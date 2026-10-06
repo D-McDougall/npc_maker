@@ -26,7 +26,6 @@ from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import genetics_pb2, genetics_pb2_grpc
-from npc_maker import individual_pb2
 from npc_maker.individual import Individual
 
 
@@ -105,7 +104,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def _organism(self, body_type):
         if not body_type:
             if len(self.organisms) == 1:
-                return next(self.organisms.values())
+                return next(iter(self.organisms.values()))
             else:
                 raise ValueError(f'missing body type')
         try:
@@ -144,10 +143,13 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
     def _save(self, individual):
         path = self.persistence / individual.metadata.name
-        # TODO: Add method to individual to update metadata instead of rewriting all files.
         if path.exists():
             Individual.delete(path)
         Individual.from_proto(individual).save(self.persistence)
+
+    def _save_metadata(self, individual):
+        path = self.persistence / individual.metadata.name
+        Individual.from_proto(individual).save_metadata(path)
 
     def Spawn(self, request, context):
         organism = self._organism(request.body_type)
@@ -211,14 +213,14 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def Score(self, request, context):
         individual = self._living(request.name)
         individual.metadata.score = request.score
-        self._save(individual)
+        self._save_metadata(individual)
         return environment_pb2.ScoreResponse()
 
     def Telemetry(self, request, context):
         individual = self._living(request.name)
         for item in request.data:
             individual.metadata.telemetry[item.key] = item.value
-        self._save(individual)
+        self._save_metadata(individual)
         return environment_pb2.TelemetryResponse()
 
     def Epigenome(self, request, context):
@@ -228,7 +230,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             # strings, while Individual stores it as opaque bytes. Preserve the
             # request for now in metadata.extra.
             individual.metadata.extra[f"epigenome.{item.key}"] = item.value
-        self._save(individual)
+        self._save_metadata(individual)
         return environment_pb2.EpigenomeResponse()
 
     def Death(self, request, context):
