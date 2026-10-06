@@ -413,7 +413,8 @@ class Individual:
             raise
         return directory
 
-    def save_metadata(self, path):
+    @staticmethod
+    def save_metadata(metadata, path):
         """
         Update the metadata file of an existing saved individual.
 
@@ -427,12 +428,12 @@ class Individual:
         metadata_file = directory.joinpath(_METADATA_FILE)
         if not metadata_file.is_file():
             raise FileNotFoundError(metadata_file)
-        metadata = json_format.MessageToJson(
-            self._message.metadata,
+        metadata_json = json_format.MessageToJson(
+            metadata,
             preserving_proto_field_name=True,
             indent=2,
             ensure_ascii=False)
-        metadata_file.write_bytes(metadata.encode("utf-8"))
+        metadata_file.write_bytes(metadata_json.encode("utf-8"))
 
     @classmethod
     def load(cls, path) -> "Individual":

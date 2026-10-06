@@ -59,7 +59,7 @@ def test_server():
             time.sleep(10)
 
             if process.poll() is not None:
-                stdout, stderr = process.communicate()
+                stdout, stderr = process.communicate(timeout=2)
                 raise AssertionError(
                     "npc-server exited unexpectedly "
                     f"with status {process.returncode}:\n"

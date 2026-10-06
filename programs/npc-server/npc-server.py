@@ -30,19 +30,6 @@ from npc_maker import genetics_pb2, genetics_pb2_grpc
 from npc_maker.individual import Individual
 
 
-TRACE = 5
-logging.addLevelName(TRACE, "TRACE")
-
-
-def _trace(self, message, *args, **kwargs):
-    if self.isEnabledFor(TRACE):
-        self._log(TRACE, message, args, **kwargs)
-
-
-logging.Logger.trace = _trace
-logger = logging.getLogger(__name__)
-
-
 class LocalProcess:
     """
     Run a local subprocess.
@@ -152,7 +139,9 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         timestamp.GetCurrentTime()
         return timestamp
 
-    def _set_defaults(self, individual, organism):
+    def _set_defaults(self, individual):
+        body_type = self._body_type(individual.metadata.body_type)
+        organism = self.organisms[body_type]
         if not individual.metadata.body_type:
             individual.metadata.body_type = organism.body_type
         controller = list(organism.controller) or list(self.config.controller)
@@ -181,10 +170,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
     def _save_metadata(self, metadata):
         path = self._living_path(metadata.name)
-        Individual.save_metadata(path, metadata)
+        Individual.save_metadata(metadata, path)
 
     def Spawn(self, request, context):
-        logger.trace("Spawn request received:\n%s", request)
+        logging.debug("Spawn request received:\n%s", request)
         body_type = self._body_type(request.body_type)
         parents = []
 
@@ -198,8 +187,9 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             response = self._call(
                 self.genetics[body_type].Reproduce,
                 genetics_pb2.ReproduceRequest(parents=parents))
-            child = response.child
+            child = Individual.from_proto(response.child)
         elif parents:
+            # No genetic algorithm registered, clone first parent.
             parent = Individual.from_proto(parents[0])
             child = Individual.reproduce([parent]).to_proto()
             child.genome = parents[0].genome
@@ -208,14 +198,14 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 f'cannot spawn body type "{body_type}": '
                 "no genetics service and no parent was selected")
 
-        self._set_defaults(child, organism)
-        child.metadata.birth_date.CopyFrom(self._timestamp())
+        self._set_defaults(child)
+        child.metadata.birth_date = self._timestamp()
         self._save(child)
         self.living[child.metadata.name] = child.metadata
         return child
 
     def Mate(self, request, context):
-        logger.trace("Mate request received:\n%s", request)
+        logging.debug("Mate request received:\n%s", request)
         if not request.parents:
             raise ValueError("at least one parent is required")
 
@@ -223,10 +213,11 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         parents = []
         for name in request.parents:
             metadata = self._living(name)
-            individual = Individual.load(metadata.name)
+            path = self._living_path(metadata.name)
+            individual = Individual.load(path)
             parents.append(individual)
 
-        body_type = self._body_type(parents[0].metadata.body_type)
+        body_type = self._body_type(parents[0].body_type)
 
         # Apply the genetic algorithm
         if body_type in self.genetics:
@@ -239,21 +230,21 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             child.epigenome = parents[0].epigenome
             child.phenome = parents[0].phenome
 
-        self._set_defaults(child, body_type)
+        self._set_defaults(child)
         child.metadata.birth_date.CopyFrom(self._timestamp())
         self._save(child)
         self.living[child.metadata.name] = child.metadata
         return child
 
     def Score(self, request, context):
-        logger.trace("Score request received:\n%s", request)
+        logging.debug("Score request received:\n%s", request)
         metadata = self._living(request.name)
         metadata.score = request.score
         self._save_metadata(metadata)
         return environment_pb2.ScoreResponse()
 
     def Telemetry(self, request, context):
-        logger.trace("Telemetry request received:\n%s", request)
+        logging.debug("Telemetry request received:\n%s", request)
         metadata = self._living(request.name)
         for item in request.data:
             metadata.telemetry[item.key] = item.value
@@ -261,7 +252,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.TelemetryResponse()
 
     def Epigenome(self, request, context):
-        logger.trace("Epigenome request received:\n%s", request)
+        logging.debug("Epigenome request received:\n%s", request)
         # TODO: Epigenetics will be sorted out in version 2.
         context.abort(grpc.StatusCode.UNIMPLEMENTED)
         metadata = self._living(request.name)
@@ -274,13 +265,13 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.EpigenomeResponse()
 
     def Death(self, request, context):
-        logger.trace("Death request received:\n%s", request)
+        logging.debug("Death request received:\n%s", request)
         # Load the individual and update its metadata.
         metadata = self._living(request.name)
-        individual = Individual.load(metadata.name)
-        individual.metadata.death_date.CopyFrom(self._timestamp())
-        body_type = self._body_type(individual.metadata.body_type)
+        body_type = self._body_type(metadata.body_type)
         path = self._living_path(metadata.name)
+        individual = Individual.load(path)
+        individual.death_date = self._timestamp()
 
         # Drop the individual (infallible, entry is guarenteed to exist)
         del self.living[metadata.name]
@@ -333,7 +324,7 @@ def load_config(path):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
@@ -347,7 +338,7 @@ def main():
 
     try:
         config = load_config(args.config)
-        logger.info("Starting NPC server with configuration:\n%s",
+        logging.info("Starting NPC server with configuration:\n%s",
                     json_format.MessageToJson(config, indent=2))
         program = NpcServer(config, args.save_dir)
     except Exception as error:

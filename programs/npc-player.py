@@ -264,9 +264,11 @@ def parse_args():
 
     args = parser.parse_args()
 
+    # Validate arguments
     if args.listen is not None and (args.host is not None or args.port is not None):
         parser.error("--listen is mutually exclusive with --host and --port")
 
+    # Clean the listen argument
     if args.listen is None:
         if args.port is None:
             parser.error("a port must be specified with --port or --listen")

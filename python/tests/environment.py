@@ -31,7 +31,7 @@ def main():
     def mate():
         num_parents = random.choice(range(4))
         parents = [
-            random.choice(list(living.values()))
+            random.choice(list(living.keys()))
             for _ in range(num_parents)
         ]
         individual = environment.Mate(
