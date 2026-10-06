@@ -227,6 +227,27 @@ def test_load_timestamp_formats(tmp_path, text):
     assert Individual.load(directory).birth_date == expected
 
 
+
+def test_save_metadata(tmp_path):
+    individual = make(b"original", score=1.0, environment="original")
+    directory = individual.save(tmp_path)
+
+    individual.score = 2.0
+    individual.environment = "changed"
+    individual.save_metadata(directory)
+
+    loaded = Individual.load(directory)
+    assert loaded.score == 2.0
+    assert loaded.environment == "changed"
+    assert loaded.genome == b"original"
+
+
+def test_save_metadata_requires_existing_metadata(tmp_path):
+    individual = make()
+    with pytest.raises(FileNotFoundError):
+        individual.save_metadata(tmp_path / "missing")
+
+
 def test_save_does_not_overwrite(tmp_path):
     individual = make(b"original")
     directory = individual.save(tmp_path)
