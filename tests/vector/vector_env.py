@@ -34,7 +34,7 @@ def score(phenome, target):
             f"expected {len(target)}"
         )
 
-    return math.sqrt(
+    return 1 - math.sqrt(
         sum((value - expected) ** 2 for value, expected in zip(phenome, target))
         / len(target)
     )
