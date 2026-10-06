@@ -1,7 +1,7 @@
 """
 Test environment for npc-server integration tests.
 
-Connects to the Evolution service supplied on the command line and repeatedly
+Connects to the Environment service supplied on the command line and repeatedly
 spawns and kills individuals.
 """
 
@@ -10,28 +10,23 @@ import time
 
 import grpc
 
-from npc_maker import evolution_pb2, evolution_pb2_grpc
+from npc_maker import environment_pb2, environment_pb2_grpc
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("address", help="Evolution service host:port")
+    parser.add_argument("address", help="Environment service host:port")
     args = parser.parse_args()
 
     channel = grpc.insecure_channel(args.address)
-    evolution = evolution_pb2_grpc.EvolutionStub(channel)
+    environment = environment_pb2_grpc.EnvironmentStub(channel)
 
     try:
         while True:
-            response = evolution.Spawn(evolution_pb2.SpawnRequest())
-            if len(response.parents) != 1:
-                raise RuntimeError(
-                    f"expected one parent, got {len(response.parents)}"
-                )
-
-            individual = response.parents[0]
-            evolution.Death(
-                evolution_pb2.DeathRequest(individual=individual)
+            response = environment.Spawn(environment_pb2.SpawnRequest())
+            individual = response
+            environment.Death(
+                environment_pb2.DeathRequest(name=individual.metadata.name)
             )
             time.sleep(0.01)
     finally:
