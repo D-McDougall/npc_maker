@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Run the NPC Maker experiment router.
+Experiment server for the NPC Maker
 
-The server is the synchronous, single-threaded MVP router between an
-independent environment and the Evolution and Genetics services configured by
-an Experiment JSON file.
+The npc-server accepts connections from Environment programs, routes their
+messages to Evolution and Genetic services, and manages their living individuals.
+
+This is a simplified implementation for testing and debugging. It is
+synchronous, single-threaded, and does not accept environment connections.
+Instead it starts a single instance of the environment.
 """
 
 import argparse
@@ -24,11 +27,13 @@ from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import genetics_pb2, genetics_pb2_grpc
 from npc_maker import individual_pb2
+from npc_maker.individual import Individual
 
 
 class ServiceProcess:
-    """A configured local gRPC service and its subprocess."""
-
+    """
+    A configured local gRPC service and its subprocess.
+    """
     def __init__(self, command, stub_class, host, port, cwd=None):
         command = list(command)
         if not command:
@@ -37,8 +42,7 @@ class ServiceProcess:
         if cwd is not None:
             Path(cwd).mkdir(parents=True, exist_ok=True)
 
-        # npc-evo accepts --listen HOST:PORT. The same convention is used by
-        # future local services launched by npc-server.
+        # NOTE: Conventional services accept "--listen HOST:PORT".
         command += ["--listen", f"{host}:{port}"]
         self.process = subprocess.Popen(command, cwd=cwd)
         self.channel = grpc.insecure_channel(f"{host}:{port}")
@@ -55,9 +59,10 @@ class ServiceProcess:
                 self.process.wait()
 
 
-class Router(environment_pb2_grpc.EnvironmentServicer):
-    """Implementation of the Environment-facing router API."""
-
+class NpcServer(environment_pb2_grpc.EnvironmentServicer):
+    """
+    Implementation of the Environment service.
+    """
     def __init__(self, config):
         self.config = config
         self.persistence = Path(config.persistence_directory)
@@ -97,6 +102,11 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
                 self.processes.append(service)
 
     def _organism(self, body_type):
+        if not body_type:
+            if len(self.organisms) == 1:
+                return next(self.organisms.values())
+            else:
+                raise ValueError(f'missing body type')
         try:
             return self.organisms[body_type]
         except KeyError:
@@ -122,6 +132,9 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
             self.server.stop(0)
 
     def _call(self, call, request):
+        """
+        Attempt a gRPC call. Handles errors by logging them and exiting.
+        """
         try:
             return call(request)
         except grpc.RpcError as error:
@@ -130,10 +143,9 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
 
     def _save(self, individual):
         path = self.persistence / individual.metadata.name
+        # TODO: Add method to individual to update metadata instead of rewriting all files.
         if path.exists():
-            from npc_maker.individual import Individual
             Individual.delete(path)
-        from npc_maker.individual import Individual
         Individual.from_proto(individual).save(self.persistence)
 
     def Spawn(self, request, context):
@@ -152,7 +164,6 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
                 genetics_pb2.ReproduceRequest(parents=parents))
             child = response.child
         elif parents:
-            from npc_maker.individual import Individual
             parent = Individual.from_proto(parents[0])
             child = Individual.reproduce([parent]).to_proto()
             child.genome = parents[0].genome
@@ -186,10 +197,8 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
                 self.genetics[body_type].Reproduce,
                 genetics_pb2.ReproduceRequest(parents=parents)).child
         else:
-            from npc_maker.individual import Individual
-            child = Individual.reproduce([
-                Individual.from_proto(parent) for parent in parents
-            ]).to_proto()
+            parents = [Individual.from_proto(parent) for parent in parents]
+            child = Individual.reproduce(parents).to_proto()
             child.genome = parents[0].genome
 
         self._set_defaults(child, organism)
@@ -232,7 +241,6 @@ class Router(environment_pb2_grpc.EnvironmentServicer):
                 evolution_pb2.DeathRequest(individual=individual))
 
         path = self.persistence / individual.metadata.name
-        from npc_maker.individual import Individual
         Individual.delete(path)
         del self.living[request.name]
         return environment_pb2.DeathResponse()
@@ -271,15 +279,15 @@ def main():
 
     try:
         config = load_config(args.filename)
-        router = Router(config)
+        program = NpcServer(config)
     except Exception as error:
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
         return 5
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    environment_pb2_grpc.add_EnvironmentServicer_to_server(router, server)
+    environment_pb2_grpc.add_EnvironmentServicer_to_server(program, server)
     server.add_insecure_port(f"{args.host}:{args.port}")
-    router.server = server
+    program.server = server
 
     try:
         server.start()
@@ -288,9 +296,9 @@ def main():
         pass
     finally:
         server.stop(0).wait()
-        router.close()
+        program.close()
 
-    return 1 if router.failed else 0
+    return 1 if program.failed else 0
 
 
 if __name__ == "__main__":
