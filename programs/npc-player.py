@@ -74,27 +74,49 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         Select and return one saved Individual.
         """
         with self._lock:
-            self._scan()
 
-            if not self._members:
-                context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    "replay population is empty",
-                )
-
-            if not self._buffer:
-                indices = self._select.select(len(self._members), self._scores)
-                self._buffer.extend(self._members[index] for index in indices)
+            self._fill_buffer(context)
 
             path = self._buffer.pop()
 
-        return evolution_pb2.SpawnResponse(parents=[Individual.load(path).to_proto()])
+            try:
+                individual = Individual.load(path)
+            except FileNotFoundError:
+                # The population may have changed after _scan().  Discard any
+                # stale selections and rebuild the population before retrying.
+
+                self._scan_time = None # Force a rescan & dump the buffer
+
+                self._fill_buffer(context)
+
+                path = self._buffer.pop()
+
+                individual = Individual.load(path)
+
+        return evolution_pb2.SpawnResponse(parents=[individual.to_proto()])
 
     def Death(self, request, context):
         """
         Discard the individual. The replayer does not modify the population.
         """
         return evolution_pb2.DeathResponse()
+
+    def _fill_buffer(self, context):
+        """
+        Ensure the internal _buffer has at least one element.
+        """
+        self._scan()
+
+        if not self._members:
+            context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "replay population is empty",
+            )
+
+        if not self._buffer:
+            indices = self._select.select(len(self._members), self._scores)
+            self._buffer.extend(self._members[index] for index in indices)
+
 
     def _scan(self):
         """
@@ -161,8 +183,8 @@ def parse_args():
 
     parser.add_argument(
         "--host",
-        default="[::]",
-        help="gRPC listen address (default: [::])",
+        default="[::1]",
+        help="gRPC listen address (default: [::1])",
     )
 
     parser.add_argument(
@@ -201,6 +223,8 @@ def serve(directory, selection, score, host, port):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+
     args = parse_args()
 
     if not args.directory.is_dir():
@@ -208,8 +232,6 @@ def main():
             f"replay directory does not exist or is not a directory: "
             f"{args.directory}"
         )
-
-    logging.basicConfig(level=logging.INFO)
 
     serve(
         args.directory,
