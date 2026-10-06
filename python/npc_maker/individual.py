@@ -24,6 +24,7 @@ All four files are required. Absent (`None`) genomes, epigenomes, and phenomes
 are written as empty files, and are read back as empty byte strings.
 """
 
+# Standard Library
 import datetime
 import json
 import math
@@ -33,9 +34,11 @@ import shutil
 import uuid
 from pathlib import Path
 
+# Third Party
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
+# First Part (generated)
 from . import individual_pb2
 
 __all__ = (
@@ -406,7 +409,6 @@ class Individual:
             shutil.rmtree(directory, ignore_errors=True)
             raise
         return directory
-
 
     def save_metadata(self, path):
         """

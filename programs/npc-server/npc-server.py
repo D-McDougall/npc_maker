@@ -142,9 +142,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             raise
 
     def _save(self, individual):
-        path = self.persistence / individual.metadata.name
+        name = individual.metadata.name
+        path = self.persistence / name
         if path.exists():
-            Individual.delete(path)
+            raise ValueError(f"Save file already exists: {path}")
         Individual.from_proto(individual).save(self.persistence)
 
     def _save_metadata(self, individual):
