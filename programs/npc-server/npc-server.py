@@ -59,7 +59,7 @@ class ServiceProcess(LocalProcess):
     """
     def __init__(self, command, stub_class, host, port, cwd=None):
         # Note: By convention services accept "--listen HOST:PORT".
-        command += ["--listen", f"{host}:{port}"]
+        command = [*command, "--listen", f"{host}:{port}"]
         super().__init__(command, cwd)
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.stub = stub_class(self.channel)
@@ -199,10 +199,9 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
         parents = []
         for name in request.parents:
-            try:
-                parents.append(self.living[name])
-            except KeyError:
-                raise ValueError(f'unknown living individual "{name}"')
+            metadata = self._living(name)
+            individual = Individual.load(metadata.name)
+            parents.append(individual)
 
         body_type = self._body_type(parents[0].metadata.body_type)
 
@@ -211,9 +210,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 self.genetics[body_type].Reproduce,
                 genetics_pb2.ReproduceRequest(parents=parents)).child
         else:
-            parents = [Individual.from_proto(parent) for parent in parents]
             child = Individual.reproduce(parents).to_proto()
             child.genome = parents[0].genome
+            child.epigenome = parents[0].epigenome
+            child.phenome = parents[0].phenome
 
         self._set_defaults(child, body_type)
         child.metadata.birth_date.CopyFrom(self._timestamp())
@@ -246,18 +246,25 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.EpigenomeResponse()
 
     def Death(self, request, context):
-        individual = self._living(request.name)
+        # Load the individual and update its metadata.
+        metadata = self._living(request.name)
+        individual = Individual.load(metadata.name)
         individual.metadata.death_date.CopyFrom(self._timestamp())
         body_type = self._body_type(individual.metadata.body_type)
         path = self.save_dir / individual.metadata.name
 
+        # Drop the individual (infallible, entry is guarenteed to exist)
+        del self.living[metadata.name]
+
+        # Notify the evolution service.
         if body_type in self.evolution:
             self._call(
                 self.evolution[body_type].Death,
                 evolution_pb2.DeathRequest(individual=individual))
 
+        # Clean up the deceased individual's save files.
         Individual.delete(path)
-        del self.living[request.name]
+
         return environment_pb2.DeathResponse()
 
     def _living(self, name):
@@ -273,9 +280,9 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         self.environment = LocalProcess(self.config.environment)
 
     def close(self):
+        self.environment.close()
         for process in reversed(self.processes):
             process.close()
-        self.environment.close()
 
 
 def _free_port():
