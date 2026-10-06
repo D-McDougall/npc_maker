@@ -12,6 +12,7 @@ Instead it starts a single instance of the environment.
 
 import argparse
 import json
+import logging
 import socket
 import subprocess
 import sys
@@ -27,6 +28,19 @@ from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import genetics_pb2, genetics_pb2_grpc
 from npc_maker.individual import Individual
+
+
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
+
+
+def _trace(self, message, *args, **kwargs):
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, message, args, **kwargs)
+
+
+logging.Logger.trace = _trace
+logger = logging.getLogger(__name__)
 
 
 class LocalProcess:
@@ -170,6 +184,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         Individual.save_metadata(path, metadata)
 
     def Spawn(self, request, context):
+        logger.trace("Spawn request received:\n%s", request)
         body_type = self._body_type(request.body_type)
         parents = []
 
@@ -200,6 +215,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return child
 
     def Mate(self, request, context):
+        logger.trace("Mate request received:\n%s", request)
         if not request.parents:
             raise ValueError("at least one parent is required")
 
@@ -230,12 +246,14 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return child
 
     def Score(self, request, context):
+        logger.trace("Score request received:\n%s", request)
         metadata = self._living(request.name)
         metadata.score = request.score
         self._save_metadata(metadata)
         return environment_pb2.ScoreResponse()
 
     def Telemetry(self, request, context):
+        logger.trace("Telemetry request received:\n%s", request)
         metadata = self._living(request.name)
         for item in request.data:
             metadata.telemetry[item.key] = item.value
@@ -243,6 +261,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.TelemetryResponse()
 
     def Epigenome(self, request, context):
+        logger.trace("Epigenome request received:\n%s", request)
         # TODO: Epigenetics will be sorted out in version 2.
         context.abort(grpc.StatusCode.UNIMPLEMENTED)
         metadata = self._living(request.name)
@@ -255,6 +274,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.EpigenomeResponse()
 
     def Death(self, request, context):
+        logger.trace("Death request received:\n%s", request)
         # Load the individual and update its metadata.
         metadata = self._living(request.name)
         individual = Individual.load(metadata.name)
@@ -313,6 +333,9 @@ def load_config(path):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
     parser.add_argument("config", type=Path, help="experiment configuration (JSON)")
     parser.add_argument("save_dir", type=Path, help="directory for persistence")
@@ -324,6 +347,8 @@ def main():
 
     try:
         config = load_config(args.config)
+        logger.info("Starting NPC server with configuration:\n%s",
+                    json_format.MessageToJson(config, indent=2))
         program = NpcServer(config, args.save_dir)
     except Exception as error:
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
