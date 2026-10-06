@@ -122,7 +122,13 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         """
         Update the population if the replay directory has changed.
         """
-        scan_time = self._path.stat().st_mtime_ns
+        # Include descendants so in-place updates to an Individual's files
+        # invalidate the scan.  Keep the population directory itself in the
+        # calculation so additions and removals are also detected.
+        scan_time = max(
+            path.stat().st_mtime_ns
+            for path in [self._path, *self._path.rglob("*")]
+        )
 
         if scan_time == self._scan_time:
             return
