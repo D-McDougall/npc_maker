@@ -7,6 +7,24 @@ parent selection algorithm, and returns that individual as a single parent to
 be cloned and used without genetic modification.
 
 This program does not modify the population. Dead individuals are discarded.
+
+
+# Custom Scoring
+
+The --score option controls how saved individuals are ranked by the selection
+algorithm. It accepts any of the following:
+
+* The name of a numeric field of the individual's Metadata or telemetry.
+  Metadata fields take precedence over telemetry keys of the same name.
+
+* A Python lambda expression, which is called with the individual's Metadata
+  message as its only argument and must return a number. For example:
+
+    --score 'lambda m: m.telemetry["kills"] / m.telemetry["deaths"]'
+
+Individuals which cannot be scored (missing fields, invalid values, or an error
+in the lambda expression) are logged as warnings and given a score of -inf, so
+they are selected only if nothing better is available.
 """
 
 # Standard Library
@@ -43,7 +61,7 @@ def _compile_lambda(src):
     tree = ast.parse(src, mode="eval")
     if not isinstance(tree.body, ast.Lambda):
         raise ValueError("score expression must be a lambda")
-    return eval(compile(tree, "<score>", "eval"), {"__builtins__": {}})
+    return eval(compile(tree, "<score>", "eval"), {"__builtins__": __builtins__})
 
 
 def _validate_selection(src):
@@ -55,6 +73,10 @@ def _validate_selection(src):
 
 
 def _validate_score(src):
+    """
+    Check that custom score is valid.
+    """
+    # Check for well-known metadata fields.
     descriptor = individual_pb2.Metadata.DESCRIPTOR.fields_by_name
     if src in descriptor:
         field = descriptor[src]
@@ -71,6 +93,7 @@ def _validate_score(src):
         if field.type not in numeric_types:
             raise argparse.ArgumentTypeError(f"score field {src!r} is not numeric")
         return src
+    # Check for lambda-expression syntax errors
     try:
         tree = ast.parse(src, mode="eval")
     except SyntaxError as error:
@@ -81,7 +104,7 @@ def _validate_score(src):
     return src
 
 
-def _score(metadata, score):
+def _score_function(metadata, score):
     if callable(score):
         return float(score(metadata))
     descriptor = metadata.DESCRIPTOR.fields_by_name
@@ -120,25 +143,21 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         """
         Select and return one saved Individual.
         """
+        # Critical section: lock access to _members, _scores, and _buffer.
         with self._lock:
 
             self._fill_buffer(context)
 
-            path = self._buffer.pop()
+            path = self._buffer.pop() # Samples in buffer are already shuffled.
 
-            try:
-                individual = Individual.load(path)
-            except FileNotFoundError:
-                # The population may have changed after _scan().  Discard any
-                # stale selections and rebuild the population before retrying.
-
-                self._scan_time = None  # Force a rescan & dump the buffer
-
-                self._fill_buffer(context)
-
-                path = self._buffer.pop()
-
-                individual = Individual.load(path)
+        # Load individual's data files
+        try:
+            individual = Individual.load(path)
+        except FileNotFoundError:
+            context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "population temporarily unavailable",
+            )
 
         return evolution_pb2.SpawnResponse(parents=[individual.to_proto()])
 
@@ -168,28 +187,19 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         """
         Update the population if the replay directory has changed.
         """
-        # Include descendants so in-place updates to an Individual's files
-        # invalidate the scan.  Keep the population directory itself in the
-        # calculation so additions and removals are also detected.
-        scan_time = max(
-            path.stat().st_mtime_ns
-            for path in [self._path, *self._path.rglob("*")]
-        )
+        scan_time = self._path.stat().st_mtime_ns
 
         if scan_time == self._scan_time:
             return
 
         metadata = Individual.load_dir(self._path)
 
-        self._members = [
-            self._path / message.name
-            for message in metadata
-        ]
+        self._members = [self._path / message.name for message in metadata]
 
         self._scores = array("d")
         for message in metadata:
             try:
-                score = _score(message, self._score)
+                score = _score_function(message, self._score)
             except Exception as error:
                 logging.warning(
                     "cannot score individual %r with %r: %s; using -inf",
@@ -207,7 +217,8 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description=__doc__
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
@@ -278,7 +289,7 @@ def serve(directory, selection, score, host, port):
         server.wait_for_termination()
     except KeyboardInterrupt:
         logging.info("KeyboardInterrupt, stopping npc-player service")
-        server.stop(1)
+        server.stop(1).wait()
 
 
 def main():
