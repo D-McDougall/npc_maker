@@ -1,4 +1,4 @@
-"""
+""" 
 Replay previously saved individuals through the NPC Maker's Evolution service.
 
 This presents a saved population through the Evolution API. Each Spawn request
@@ -10,6 +10,7 @@ This program does not modify the population. Dead individuals are discarded.
 """
 
 # Standard Library
+from array import array
 from concurrent import futures
 from pathlib import Path
 import argparse
@@ -36,6 +37,7 @@ def _is_lambda(src):
     except SyntaxError:
         return False
     return isinstance(tree.body, ast.Lambda)
+
 
 def _compile_lambda(src):
     tree = ast.parse(src, mode="eval")
@@ -73,7 +75,9 @@ def _validate_score(src):
         tree = ast.parse(src, mode="eval")
     except SyntaxError as error:
         if src.lstrip().startswith("lambda"):
-            raise argparse.ArgumentTypeError(f"invalid score lambda: {error.msg}") from error
+            raise argparse.ArgumentTypeError(
+                f"invalid score lambda: {error.msg}"
+            ) from error
     return src
 
 
@@ -104,7 +108,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
 
         # Paths to saved individuals.  These run parallel to _scores.
         self._members = []
-        self._scores = []
+        self._scores = array("d")
 
         # Individuals selected by the selection algorithm but not yet spawned.
         self._buffer = []
@@ -128,7 +132,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
                 # The population may have changed after _scan().  Discard any
                 # stale selections and rebuild the population before retrying.
 
-                self._scan_time = None # Force a rescan & dump the buffer
+                self._scan_time = None  # Force a rescan & dump the buffer
 
                 self._fill_buffer(context)
 
@@ -160,7 +164,6 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
             indices = self._select.select(len(self._members), self._scores)
             self._buffer.extend(self._members[index] for index in indices)
 
-
     def _scan(self):
         """
         Update the population if the replay directory has changed.
@@ -183,7 +186,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
             for message in metadata
         ]
 
-        self._scores = []
+        self._scores = array("d")
         for message in metadata:
             try:
                 score = _score(message, self._score)
