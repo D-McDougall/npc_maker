@@ -1,9 +1,15 @@
 #!/usr/bin/env python
 
-"""Vector optimization test environment.
+"""
+Vector optimization test environment.
 
-The environment repeatedly spawns an individual, scores its phenome by its
-RMS error from a seeded target vector, and then kills it.
+The vector environment is a minimal environment for testing evolutionary
+algorithms. It deterministically generates a pseudorandom target vector from
+seed. Individuals phenomes are JSON arrays of numbers, and their score is the
+root-mean-square (RMS) error from the target vector. 
+
+This program loops forever. It spawns one individual, scores it, kills its, and
+then the cycle repeats.
 """
 
 import argparse

@@ -13,6 +13,8 @@ The problem is to find a randomly generated vector T in R^N
 The genome is a vector G in R^N  
 The score is the RMS of (T - G)
 
+All vector components are in the range \[0, 1\]
+
 ## Environment
 
 The vector environment generates a deterministic target vector from a supplied
