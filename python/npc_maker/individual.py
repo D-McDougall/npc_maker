@@ -395,7 +395,10 @@ class Individual:
         path = Path(path)
         path.mkdir(exist_ok=True)
         directory = path.joinpath(name)
-        directory.mkdir()  # Do not allow overwrite
+        # Do not allow overwrite
+        if directory.exists():
+            raise ValueError(f"Individual already saved: {directory}")
+        directory.mkdir()
         try:
             metadata = json_format.MessageToJson(
                 self._message.metadata,

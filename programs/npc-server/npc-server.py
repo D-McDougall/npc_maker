@@ -118,7 +118,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def _body_type(self, body_type):
         if not body_type:
             if len(self.organisms) == 1:
-                return next(iter(self.organisms.values()))
+                return next(iter(self.organisms.values())).body_type
             else:
                 raise ValueError(f'missing body type')
         try:
@@ -156,15 +156,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             raise
 
     def _save(self, individual):
-        name = individual.metadata.name
-        path = self.save_dir / name
-        if path.exists():
-            raise ValueError(f"Save file already exists: {path}")
+        path = self._living_path(individual.metadata.name)
         Individual.from_proto(individual).save(self.save_dir)
 
-    def _save_metadata(self, individual):
-        path = self.save_dir / individual.metadata.name
-        Individual.from_proto(individual).save_metadata(path)
+    def _save_metadata(self, metadata):
+        path = self._living_path(metadata.name)
+        Individual.save_metadata(path, metadata)
 
     def Spawn(self, request, context):
         body_type = self._body_type(request.body_type)
@@ -200,6 +197,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         if not request.parents:
             raise ValueError("at least one parent is required")
 
+        # Access and load the requested parents.
         parents = []
         for name in request.parents:
             metadata = self._living(name)
@@ -208,12 +206,13 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
         body_type = self._body_type(parents[0].metadata.body_type)
 
+        # Apply the genetic algorithm
         if body_type in self.genetics:
             child = self._call(
                 self.genetics[body_type].Reproduce,
                 genetics_pb2.ReproduceRequest(parents=parents)).child
         else:
-            child = Individual.reproduce(parents).to_proto()
+            child = Individual.reproduce([parents[0]]).to_proto()
             child.genome = parents[0].genome
             child.epigenome = parents[0].epigenome
             child.phenome = parents[0].phenome
@@ -225,27 +224,28 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return child
 
     def Score(self, request, context):
-        individual = self._living(request.name)
-        individual.metadata.score = request.score
-        self._save_metadata(individual)
+        metadata = self._living(request.name)
+        metadata.score = request.score
+        self._save_metadata(metadata)
         return environment_pb2.ScoreResponse()
 
     def Telemetry(self, request, context):
-        individual = self._living(request.name)
+        metadata = self._living(request.name)
         for item in request.data:
-            individual.metadata.telemetry[item.key] = item.value
-        self._save_metadata(individual)
+            metadata.telemetry[item.key] = item.value
+        self._save_metadata(metadata)
         return environment_pb2.TelemetryResponse()
 
     def Epigenome(self, request, context):
         # TODO: Epigenetics will be sorted out in version 2.
-        individual = self._living(request.name)
+        context.abort(grpc.StatusCode.UNIMPLEMENTED)
+        metadata = self._living(request.name)
         for item in request.data:
             # The current environment API exposes epigenome data as key/value
             # strings, while Individual stores it as opaque bytes. Preserve the
             # request for now in metadata.extra.
-            individual.metadata.extra[f"epigenome.{item.key}"] = item.value
-        self._save_metadata(individual)
+            metadata.extra[f"epigenome.{item.key}"] = item.value
+        self._save_metadata(metadata)
         return environment_pb2.EpigenomeResponse()
 
     def Death(self, request, context):
@@ -254,7 +254,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         individual = Individual.load(metadata.name)
         individual.metadata.death_date.CopyFrom(self._timestamp())
         body_type = self._body_type(individual.metadata.body_type)
-        path = self.save_dir / individual.metadata.name
+        path = self._living_path(metadata.name)
 
         # Drop the individual (infallible, entry is guarenteed to exist)
         del self.living[metadata.name]
@@ -271,10 +271,19 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.DeathResponse()
 
     def _living(self, name):
+        """
+        Get the metadata for a living individual.
+        """
         try:
             return self.living[name]
         except KeyError:
             raise ValueError(f'unknown living individual "{name}"')
+
+    def _living_path(self, name):
+        """
+        Get the save directory for a living individual.
+        """
+        return self.save_dir / name
 
     def start_environment(self):
         """
