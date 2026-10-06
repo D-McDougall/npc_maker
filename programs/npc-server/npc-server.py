@@ -15,6 +15,7 @@ import json
 import socket
 import subprocess
 import sys
+import time
 from concurrent import futures
 from pathlib import Path
 
@@ -61,6 +62,7 @@ class ServiceProcess(LocalProcess):
         # Note: By convention services accept "--listen HOST:PORT".
         command = [*command, "--listen", f"{host}:{port}"]
         super().__init__(command, cwd)
+        time.sleep(3)
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.stub = stub_class(self.channel)
 

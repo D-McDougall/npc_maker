@@ -23,8 +23,7 @@ def main():
 
     try:
         while True:
-            response = environment.Spawn(environment_pb2.SpawnRequest())
-            individual = response
+            individual = environment.Spawn(environment_pb2.SpawnRequest())
             environment.Death(
                 environment_pb2.DeathRequest(name=individual.metadata.name)
             )
