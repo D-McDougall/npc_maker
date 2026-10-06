@@ -407,6 +407,28 @@ class Individual:
             raise
         return directory
 
+
+    def save_metadata(self, path):
+        """
+        Update the metadata file of an existing saved individual.
+
+        Argument path is the directory containing the individual's files,
+        like the argument to `load()`. Only `metadata.json` is modified;
+        the genome, epigenome, and phenome are left unchanged.
+
+        Raises FileNotFoundError if the metadata file does not exist.
+        """
+        directory = Path(path)
+        metadata_file = directory.joinpath(_METADATA_FILE)
+        if not metadata_file.is_file():
+            raise FileNotFoundError(metadata_file)
+        metadata = json_format.MessageToJson(
+            self._message.metadata,
+            preserving_proto_field_name=True,
+            indent=2,
+            ensure_ascii=False)
+        metadata_file.write_bytes(metadata.encode("utf-8"))
+
     @classmethod
     def load(cls, path) -> "Individual":
         """
