@@ -259,7 +259,7 @@ def parse_args():
     parser.add_argument(
         "--port",
         type=int,
-        help="gRPC listen port (default: 50051)",
+        help="gRPC listen port",
     )
 
     args = parser.parse_args()
@@ -268,9 +268,12 @@ def parse_args():
         parser.error("--listen is mutually exclusive with --host and --port")
 
     if args.listen is None:
+        if args.port is None:
+            parser.error("a port must be specified with --port or --listen")
         host = "[::1]" if args.host is None else args.host
-        port = 50051 if args.port is None else args.port
-        args.listen = f"{host}:{port}"
+        args.listen = f"{host}:{args.port}"
+    elif ":" not in args.listen:
+        parser.error("--listen must specify a port")
 
     return args
 
