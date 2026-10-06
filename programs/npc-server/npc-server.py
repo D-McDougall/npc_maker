@@ -139,14 +139,14 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         timestamp.GetCurrentTime()
         return timestamp
 
-    def _set_defaults(self, individual):
-        body_type = self._body_type(individual.metadata.body_type)
+    def _set_defaults(self, individual: Individual):
+        body_type = self._body_type(individual.body_type)
         organism = self.organisms[body_type]
-        if not individual.metadata.body_type:
-            individual.metadata.body_type = organism.body_type
+        if not individual.body_type:
+            individual.body_type = organism.body_type
         controller = list(organism.controller) or list(self.config.controller)
-        if not individual.metadata.controller and controller:
-            individual.metadata.controller.extend(controller)
+        if not individual.controller and controller:
+            individual.controller = controller
 
     def _fatal(self, error):
         self.failed = True
@@ -164,9 +164,8 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             self._fatal(error)
             raise
 
-    def _save(self, individual):
-        path = self._living_path(individual.metadata.name)
-        Individual.from_proto(individual).save(self.save_dir)
+    def _save(self, individual: Individual):
+        individual.save(self.save_dir)
 
     def _save_metadata(self, metadata):
         path = self._living_path(metadata.name)
@@ -181,17 +180,17 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             response = self._call(
                 self.evolution[body_type].Spawn,
                 evolution_pb2.SpawnRequest())
-            parents = list(response.parents)
+            parents = [Individual.from_proto(parent) for parent in response.parents]
 
         if body_type in self.genetics:
             response = self._call(
                 self.genetics[body_type].Reproduce,
-                genetics_pb2.ReproduceRequest(parents=parents))
+                genetics_pb2.ReproduceRequest(
+                    parents=[parent.to_proto() for parent in parents]))
             child = Individual.from_proto(response.child)
         elif parents:
             # No genetic algorithm registered, clone first parent.
-            parent = Individual.from_proto(parents[0])
-            child = Individual.reproduce([parent]).to_proto()
+            child = Individual.reproduce([parents[0]])
             child.genome = parents[0].genome
         else:
             raise RuntimeError(
@@ -199,10 +198,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 "no genetics service and no parent was selected")
 
         self._set_defaults(child)
-        child.metadata.birth_date = self._timestamp()
+        child.birth_date = self._timestamp()
         self._save(child)
-        self.living[child.metadata.name] = child.metadata
-        return child
+        self.living[child.name] = child.to_proto().metadata
+        return child.to_proto()
 
     def Mate(self, request, context):
         logging.debug("Mate request received:\n%s", request)
@@ -219,22 +218,24 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
         body_type = self._body_type(parents[0].body_type)
 
-        # Apply the genetic algorithm
+        # Apply the genetic algorithm.
         if body_type in self.genetics:
-            child = self._call(
+            response = self._call(
                 self.genetics[body_type].Reproduce,
-                genetics_pb2.ReproduceRequest(parents=parents)).child
+                genetics_pb2.ReproduceRequest(
+                    parents=[parent.to_proto() for parent in parents]))
+            child = Individual.from_proto(response.child)
         else:
-            child = Individual.reproduce([parents[0]]).to_proto()
+            child = Individual.reproduce([parents[0]])
             child.genome = parents[0].genome
             child.epigenome = parents[0].epigenome
             child.phenome = parents[0].phenome
 
         self._set_defaults(child)
-        child.metadata.birth_date.CopyFrom(self._timestamp())
+        child.birth_date = self._timestamp()
         self._save(child)
-        self.living[child.metadata.name] = child.metadata
-        return child
+        self.living[child.name] = child.to_proto().metadata
+        return child.to_proto()
 
     def Score(self, request, context):
         logging.debug("Score request received:\n%s", request)
@@ -280,7 +281,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         if body_type in self.evolution:
             self._call(
                 self.evolution[body_type].Death,
-                evolution_pb2.DeathRequest(individual=individual))
+                evolution_pb2.DeathRequest(individual=individual.to_proto()))
 
         # Clean up the deceased individual's save files.
         Individual.delete(path)
