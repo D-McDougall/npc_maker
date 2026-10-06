@@ -52,6 +52,9 @@ def test_server():
             stderr=subprocess.PIPE,
         )
 
+        stdout = b""
+        stderr = b""
+
         try:
             time.sleep(10)
 
@@ -67,7 +70,13 @@ def test_server():
             if process.poll() is None:
                 process.terminate()
                 try:
-                    process.wait(timeout=2)
+                    stdout, stderr = process.communicate(timeout=2)
                 except subprocess.TimeoutExpired:
                     process.kill()
-                    process.wait(timeout=2)
+                    stdout, stderr = process.communicate()
+
+            if stderr:
+                raise AssertionError(
+                    "npc-server wrote to stderr:\n"
+                    f"{stderr.decode()}"
+                )
