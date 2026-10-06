@@ -20,7 +20,11 @@
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Artificial Life",
     ]
-    dependencies = []
+    dependencies = [
+        "protobuf",
+        "grpcio-tools",
+        "mate_selection",
+    ]
 
 [project.urls]
     Repository = "https://github.com/D-McDougall/npc_maker"

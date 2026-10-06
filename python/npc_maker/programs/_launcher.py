@@ -13,5 +13,5 @@ def _run_bundled_binary(file_name):
 def npc_evo():
     _run_bundled_binary("npc-evo")
 
-def npc_maker():
-    _run_bundled_binary("npc-maker")
+def npc_server():
+    _run_bundled_binary("npc-server")

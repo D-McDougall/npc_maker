@@ -73,10 +73,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     """
     Implementation of the Environment service.
     """
-    def __init__(self, config):
+    def __init__(self, config, save_dir):
         self.config = config
-        self.persistence = Path(config.persistence_directory)
-        self.persistence.mkdir(parents=True, exist_ok=True)
+        self.save_dir = Path(save_dir)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
         self.living = {}
         self.evolution = {}
         self.genetics = {}
@@ -99,7 +99,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 service = ServiceProcess(
                     evolution, evolution_pb2_grpc.EvolutionStub,
                     "127.0.0.1", port,
-                    cwd=self.persistence / f"{body_type}-evolution")
+                    cwd=self.save_dir / f"{body_type}-evolution")
                 self.evolution[body_type] = service.stub
                 self.processes.append(service)
 
@@ -108,11 +108,11 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 service = ServiceProcess(
                     genetics, genetics_pb2_grpc.GeneticsStub,
                     "127.0.0.1", port,
-                    cwd=self.persistence / f"{body_type}-genetics")
+                    cwd=self.save_dir / f"{body_type}-genetics")
                 self.genetics[body_type] = service.stub
                 self.processes.append(service)
 
-    def _organism(self, body_type):
+    def _body_type(self, body_type):
         if not body_type:
             if len(self.organisms) == 1:
                 return next(iter(self.organisms.values()))
@@ -154,28 +154,28 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
     def _save(self, individual):
         name = individual.metadata.name
-        path = self.persistence / name
+        path = self.save_dir / name
         if path.exists():
             raise ValueError(f"Save file already exists: {path}")
-        Individual.from_proto(individual).save(self.persistence)
+        Individual.from_proto(individual).save(self.save_dir)
 
     def _save_metadata(self, individual):
-        path = self.persistence / individual.metadata.name
+        path = self.save_dir / individual.metadata.name
         Individual.from_proto(individual).save_metadata(path)
 
     def Spawn(self, request, context):
-        organism = self._organism(request.body_type)
+        body_type = self._body_type(request.body_type)
         parents = []
 
-        if request.body_type in self.evolution:
+        if body_type in self.evolution:
             response = self._call(
-                self.evolution[request.body_type].Spawn,
+                self.evolution[body_type].Spawn,
                 evolution_pb2.SpawnRequest())
             parents = list(response.parents)
 
-        if request.body_type in self.genetics:
+        if body_type in self.genetics:
             response = self._call(
-                self.genetics[request.body_type].Reproduce,
+                self.genetics[body_type].Reproduce,
                 genetics_pb2.ReproduceRequest(parents=parents))
             child = response.child
         elif parents:
@@ -184,13 +184,13 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             child.genome = parents[0].genome
         else:
             raise RuntimeError(
-                f'cannot spawn body type "{request.body_type}": '
+                f'cannot spawn body type "{body_type}": '
                 "no genetics service and no parent was selected")
 
         self._set_defaults(child, organism)
         child.metadata.birth_date.CopyFrom(self._timestamp())
-        self.living[child.metadata.name] = child
         self._save(child)
+        self.living[child.metadata.name] = child.metadata
         return child
 
     def Mate(self, request, context):
@@ -204,8 +204,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             except KeyError:
                 raise ValueError(f'unknown living individual "{name}"')
 
-        body_type = parents[0].metadata.body_type
-        organism = self._organism(body_type)
+        body_type = self._body_type(parents[0].metadata.body_type)
 
         if body_type in self.genetics:
             child = self._call(
@@ -216,10 +215,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             child = Individual.reproduce(parents).to_proto()
             child.genome = parents[0].genome
 
-        self._set_defaults(child, organism)
+        self._set_defaults(child, body_type)
         child.metadata.birth_date.CopyFrom(self._timestamp())
-        self.living[child.metadata.name] = child
         self._save(child)
+        self.living[child.metadata.name] = child.metadata
         return child
 
     def Score(self, request, context):
@@ -236,6 +235,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         return environment_pb2.TelemetryResponse()
 
     def Epigenome(self, request, context):
+        # TODO: Epigenetics will be sorted out in version 2.
         individual = self._living(request.name)
         for item in request.data:
             # The current environment API exposes epigenome data as key/value
@@ -248,14 +248,14 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def Death(self, request, context):
         individual = self._living(request.name)
         individual.metadata.death_date.CopyFrom(self._timestamp())
-        body_type = individual.metadata.body_type
+        body_type = self._body_type(individual.metadata.body_type)
+        path = self.save_dir / individual.metadata.name
 
         if body_type in self.evolution:
             self._call(
                 self.evolution[body_type].Death,
                 evolution_pb2.DeathRequest(individual=individual))
 
-        path = self.persistence / individual.metadata.name
         Individual.delete(path)
         del self.living[request.name]
         return environment_pb2.DeathResponse()
@@ -292,19 +292,24 @@ def load_config(path):
 
 def main():
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
-    parser.add_argument("filename", help="experiment configuration (JSON)")
+    parser.add_argument("config", type=Path, help="experiment configuration (JSON)")
+    parser.add_argument("save_dir", type=Path, help="directory for persistence")
     args = parser.parse_args()
 
+    host = "127.0.0.1"
+    port = _free_port()
+    listen = f"{host}:{port}"
+
     try:
-        config = load_config(args.filename)
-        program = NpcServer(config)
+        config = load_config(args.config)
+        program = NpcServer(config, args.save_dir)
     except Exception as error:
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
         return 5
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     environment_pb2_grpc.add_EnvironmentServicer_to_server(program, server)
-    server.add_insecure_port(f"{args.host}:{args.port}")
+    server.add_insecure_port(listen)
     program.server = server
 
     try:

@@ -47,7 +47,7 @@ def test_server():
         config_file.write_text(json.dumps(config), encoding="utf-8")
 
         process = subprocess.Popen(
-            ["npc-server", str(config_file)],
+            ["npc-server.py", str(config_file), str(directory / "server-data")],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -61,8 +61,7 @@ def test_server():
                     "npc-server exited unexpectedly "
                     f"with status {process.returncode}:\n"
                     f"stdout:\n{stdout.decode()}\n"
-                    f"stderr:\n{stderr.decode()}"
-                )
+                    f"stderr:\n{stderr.decode()}")
         finally:
             if process.poll() is None:
                 process.terminate()
