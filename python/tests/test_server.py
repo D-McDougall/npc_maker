@@ -24,12 +24,12 @@ def test_server():
             individual.score = score
             individual.save(population)
 
+        environment = Path(__file__).with_name("environment.py")
         config = {
             "name": "npc-server smoke test",
             "environment": [
                 sys.executable,
-                "-c",
-                "import time; time.sleep(60)",
+                str(environment),
             ],
             "organisms": [
                 {
@@ -61,7 +61,8 @@ def test_server():
                     "npc-server exited unexpectedly "
                     f"with status {process.returncode}:\n"
                     f"stdout:\n{stdout.decode()}\n"
-                    f"stderr:\n{stderr.decode()}")
+                    f"stderr:\n{stderr.decode()}"
+                )
         finally:
             if process.poll() is None:
                 process.terminate()
