@@ -51,6 +51,7 @@ def test_vector(dimension, seed):
             "npc-server.py",
             str(config_file),
             str(directory / "server-data"),
+            "--verbose",
         ]).returncode
 
 

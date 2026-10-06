@@ -302,7 +302,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         Start the single environment instance configured by the experiment.
         """
         command = list(self.config.environment)
-        command.append(self.listen)
+        command.extend(["--listen", self.listen])
         self.environment = LocalProcess(command)
 
 

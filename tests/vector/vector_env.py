@@ -42,7 +42,7 @@ def score(phenome, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("address", help="Environment service host:port")
+    parser.add_argument("--listen", help="Environment service host:port")
     parser.add_argument("dimension", type=int, help="Number of target dimensions")
     parser.add_argument("seed", type=int, help="Seed used to generate the target")
     args = parser.parse_args()
@@ -52,7 +52,7 @@ def main():
 
     target = make_target(args.dimension, args.seed)
 
-    channel = grpc.insecure_channel(args.address)
+    channel = grpc.insecure_channel(args.listen)
     environment = environment_pb2_grpc.EnvironmentStub(channel)
 
     try:
