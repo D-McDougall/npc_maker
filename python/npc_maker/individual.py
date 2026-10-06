@@ -121,6 +121,8 @@ def _timestamp_field(field: str, doc: str) -> property:
     def setter(self, value):
         if value is None:
             self._message.metadata.ClearField(field)
+        elif isinstance(value, Timestamp):
+            getattr(self._message.metadata, field).CopyFrom(value)
         else:
             timestamp = Timestamp()
             timestamp.FromDatetime(value)

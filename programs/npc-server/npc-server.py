@@ -11,6 +11,7 @@ Instead it starts a single instance of the environment.
 """
 
 import argparse
+import datetime
 import json
 import logging
 import socket
@@ -21,7 +22,6 @@ from pathlib import Path
 
 import grpc
 from google.protobuf import json_format
-from google.protobuf.timestamp_pb2 import Timestamp
 
 from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
@@ -129,21 +129,15 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             else:
                 raise ValueError(f'missing body type')
         try:
-            return self.organisms[body_type]
+            return self.organisms[body_type].body_type
         except KeyError:
             raise ValueError(f'unknown body type "{body_type}"')
 
-    @staticmethod
-    def _timestamp():
-        timestamp = Timestamp()
-        timestamp.GetCurrentTime()
-        return timestamp
-
     def _set_defaults(self, individual: Individual):
         body_type = self._body_type(individual.body_type)
-        organism = self.organisms[body_type]
         if not individual.body_type:
-            individual.body_type = organism.body_type
+            individual.body_type = body_type
+        organism = self.organisms[body_type]
         controller = list(organism.controller) or list(self.config.controller)
         if not individual.controller and controller:
             individual.controller = controller
@@ -163,13 +157,6 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         except grpc.RpcError as error:
             self._fatal(error)
             raise
-
-    def _save(self, individual: Individual):
-        individual.save(self.save_dir)
-
-    def _save_metadata(self, metadata):
-        path = self._living_path(metadata.name)
-        Individual.save_metadata(metadata, path)
 
     def Spawn(self, request, context):
         logging.debug("Spawn request received:\n%s", request)
@@ -198,7 +185,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 "no genetics service and no parent was selected")
 
         self._set_defaults(child)
-        child.birth_date = self._timestamp()
+        child.birth_date = datetime.datetime.now()
         self._save(child)
         self.living[child.name] = child.to_proto().metadata
         return child.to_proto()
@@ -232,7 +219,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             child.phenome = parents[0].phenome
 
         self._set_defaults(child)
-        child.birth_date = self._timestamp()
+        child.birth_date = datetime.datetime.now()
         self._save(child)
         self.living[child.name] = child.to_proto().metadata
         return child.to_proto()
@@ -272,7 +259,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         body_type = self._body_type(metadata.body_type)
         path = self._living_path(metadata.name)
         individual = Individual.load(path)
-        individual.death_date = self._timestamp()
+        individual.death_date = datetime.datetime.now()
 
         # Drop the individual (infallible, entry is guarenteed to exist)
         del self.living[metadata.name]
@@ -302,6 +289,13 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         Get the save directory for a living individual.
         """
         return self.save_dir / name
+
+    def _save(self, individual: Individual):
+        individual.save(self.save_dir)
+
+    def _save_metadata(self, metadata):
+        path = self._living_path(metadata.name)
+        Individual.save_metadata(metadata, path)
 
     def start_environment(self):
         """

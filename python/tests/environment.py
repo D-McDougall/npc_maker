@@ -29,7 +29,7 @@ def main():
         living[individual.metadata.name] = individual
 
     def mate():
-        num_parents = random.choice(range(4))
+        num_parents = random.choice(range(1, 4))
         parents = [
             random.choice(list(living.keys()))
             for _ in range(num_parents)
