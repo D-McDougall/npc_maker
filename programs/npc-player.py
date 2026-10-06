@@ -88,7 +88,7 @@ def _validate_score(src):
             FieldDescriptor.TYPE_FIXED32, FieldDescriptor.TYPE_FIXED64,
             FieldDescriptor.TYPE_SFIXED32, FieldDescriptor.TYPE_SFIXED64,
         }
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if field.is_repeated:
             raise argparse.ArgumentTypeError(f"score field {src!r} is repeated")
         if field.type not in numeric_types:
             raise argparse.ArgumentTypeError(f"score field {src!r} is not numeric")
