@@ -15,6 +15,7 @@ from pathlib import Path
 import argparse
 import logging
 import threading
+import sys
 
 # Third Party
 import grpc
@@ -220,12 +221,17 @@ def serve(directory, selection, score, host, port):
 
     server.start()
 
-    logging.info("NPC player listening on %s", address)
+    logging.info("npc-player is: %s %s", sys.executable, sys.argv[0])
+    logging.info("Listening on: %s", address)
     logging.info("Replay population: %s", directory)
     logging.info("Mate selection: %s", selection)
     logging.info("Score: %s", score)
 
-    server.wait_for_termination()
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt, stopping npc-player service")
+        server.stop(1)
 
 
 def main():
