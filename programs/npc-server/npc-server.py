@@ -72,6 +72,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         self.genetics = {}
         self.processes = []
         self.server = None
+        self.environment = None
         self.failed = False
 
         self.organisms = {
@@ -251,7 +252,26 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         except KeyError:
             raise ValueError(f'unknown living individual "{name}"')
 
+    def start_environment(self):
+        """
+        Start the single environment instance configured by the experiment.
+        """
+        command = list(self.config.environment)
+        if not command:
+            raise ValueError("experiment environment command is empty")
+        self.environment = subprocess.Popen(command)
+
     def close(self):
+        if self.environment is not None:
+            if self.environment.poll() is None:
+                self.environment.terminate()
+                try:
+                    self.environment.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    self.environment.kill()
+                    self.environment.wait()
+            self.environment = None
+
         for process in reversed(self.processes):
             process.close()
 
@@ -291,6 +311,7 @@ def main():
 
     try:
         server.start()
+        program.start_environment()
         server.wait_for_termination()
     except KeyboardInterrupt:
         pass
