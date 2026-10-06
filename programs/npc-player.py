@@ -38,7 +38,7 @@ def _score(metadata, field):
     descriptor = metadata.DESCRIPTOR.fields_by_name
     if field in descriptor:
         if descriptor[field].has_presence and not metadata.HasField(field):
-            return float("-inf")
+            raise ValueError(f"metadata field {field!r} is not present")
         return float(getattr(metadata, field))
 
     if field in metadata.telemetry:
@@ -112,10 +112,19 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
             for message in metadata
         ]
 
-        self._scores = [
-            _score(message, self._score)
-            for message in metadata
-        ]
+        self._scores = []
+        for message in metadata:
+            try:
+                score = _score(message, self._score)
+            except Exception as error:
+                logging.warning(
+                    "cannot score individual %r with %r: %s; using -inf",
+                    message.name,
+                    self._score,
+                    error,
+                )
+                score = float("-inf")
+            self._scores.append(score)
 
         # A changed population invalidates selections made from the old one.
         self._buffer = []
