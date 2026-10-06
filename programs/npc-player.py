@@ -247,22 +247,35 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--listen",
+        help="gRPC listen address as host:port (mutually exclusive with --host/--port)",
+    )
+
+    parser.add_argument(
         "--host",
-        default="[::1]",
-        help="gRPC listen address (default: [::1])",
+        help="gRPC listen host (default: [::1])",
     )
 
     parser.add_argument(
         "--port",
         type=int,
-        default=50051,
         help="gRPC listen port (default: 50051)",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.listen is not None and (args.host is not None or args.port is not None):
+        parser.error("--listen is mutually exclusive with --host and --port")
+
+    if args.listen is None:
+        host = "[::1]" if args.host is None else args.host
+        port = 50051 if args.port is None else args.port
+        args.listen = f"{host}:{port}"
+
+    return args
 
 
-def serve(directory, selection, score, host, port):
+def serve(directory, selection, score, listen):
     player = Player(directory, selection, score)
 
     server = grpc.server(
@@ -274,13 +287,12 @@ def serve(directory, selection, score, host, port):
         server,
     )
 
-    address = f"{host}:{port}"
-    server.add_insecure_port(address)
+    server.add_insecure_port(listen)
 
     server.start()
 
     logging.info("npc-player is: %s %s", sys.executable, sys.argv[0])
-    logging.info("Listening on: %s", address)
+    logging.info("Listening on: %s", listen)
     logging.info("Replay population: %s", directory)
     logging.info("Mate selection: %s", selection)
     logging.info("Score: %s", score)
@@ -307,8 +319,7 @@ def main():
         args.directory,
         args.selection,
         args.score,
-        args.host,
-        args.port,
+        args.listen,
     )
 
 
