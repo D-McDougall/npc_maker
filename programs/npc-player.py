@@ -1,12 +1,12 @@
 """
-Replay previously saved individuals through the Evolution gRPC service.
+Replay previously saved individuals through the NPC Maker's Evolution service.
 
-The player presents a saved population through the Evolution API. Each Spawn
-request selects one saved individual according to the configured score function
-and mate-selection algorithm, and then returns a copy of that individual.
+This presents a saved population through the Evolution API. Each Spawn request
+selects one saved individual according to the configured score function and
+parent selection algorithm, and returns that individual as a single parent to
+be cloned and used without genetic modification.
 
-The Death RPC is intentionally a no-op: replayed individuals already lived and
-their death does not change the replay population.
+This program does not modify the population. Dead individuals are discarded.
 """
 
 # Standard Library
@@ -124,7 +124,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Replay saved NPC Maker individuals through gRPC."
+        description=__doc__
     )
 
     parser.add_argument(

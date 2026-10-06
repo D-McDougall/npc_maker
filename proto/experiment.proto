@@ -3,6 +3,8 @@ syntax = "proto3";
 package experiment;
 
 /*
+Format for JSON experiment files (*.exp).
+
 The experiment message defines the semantics of a complete artificial-life
 experiment.
 */
@@ -35,6 +37,10 @@ message Experiment {
   repeated Organism organisms = 7;
 }
 
+/*
+Organism messages attach a evolutionary algorithm, genetic algorithm, and
+control system to each body type.
+*/
 message Organism {
 
   string body_type = 1;
@@ -42,29 +48,29 @@ message Organism {
   optional string description = 2;
 
   /*
-  Command line invocation for this organism's control system service.
-  */
-  repeated string controller = 3;
-
-  /*
-  Command line invocation for this organism's evolution service.
+  Command line invocation for this organism's Evolution service.
 
   If missing then all spawn requests will create founder individuals, by sending
   zero parents to the genetic service.
 
-  Each instance of the evolution service is assigned a subdirectory in the
+  Each instance of the Evolution service is assigned a subdirectory in the
   persistence_directory, which it uses as its initial working directory.
   */
-  repeated string evolution = 4;
+  repeated string evolution = 3;
 
   /*
-  Command line invocation for this organism's genetics service.
+  Command line invocation for this organism's Genetics service.
 
   If missing then the npc-server will use the first parent's genetic material,
   as returned by the evolution service.
 
-  Each instance of the genetics service is assigned a subdirectory in the
+  Each instance of the Genetics service is assigned a subdirectory in the
   persistence_directory, which it uses as its initial working directory.
   */
-  repeated string genetics = 5;
+  repeated string genetics = 4;
+
+  /*
+  Command line invocation for this organism's Controller service.
+  */
+  repeated string controller = 5;
 }
