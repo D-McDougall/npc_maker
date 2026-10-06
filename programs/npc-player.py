@@ -30,12 +30,6 @@ from npc_maker.individual import Individual
 import mate_selection
 
 
-def _compile_lambda(src):
-    tree = ast.parse(src, mode="eval")
-    if not isinstance(tree.body, ast.Lambda):
-        raise ValueError("score expression must be a lambda")
-    return eval(compile(tree, "<score>", "eval"), {"__builtins__": {}})
-
 def _is_lambda(src):
     try:
         tree = ast.parse(src, mode="eval")
@@ -43,12 +37,27 @@ def _is_lambda(src):
         return False
     return isinstance(tree.body, ast.Lambda)
 
+def _compile_lambda(src):
+    tree = ast.parse(src, mode="eval")
+    if not isinstance(tree.body, ast.Lambda):
+        raise ValueError("score expression must be a lambda")
+    return eval(compile(tree, "<score>", "eval"), {"__builtins__": {}})
+
+
+def _validate_selection(src):
+    try:
+        mate_selection.parse(src)
+    except Exception as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+    return src
+
+
 def _validate_score(src):
     descriptor = individual_pb2.Metadata.DESCRIPTOR.fields_by_name
     if src in descriptor:
         field = descriptor[src]
         numeric_types = {
-            FieldDescriptor.TYPE_DOUBLE, FieldDescriptor.TYPE_FLOAT,
+            FieldDescriptor.TYPE_FLOAT, FieldDescriptor.TYPE_DOUBLE,
             FieldDescriptor.TYPE_INT32, FieldDescriptor.TYPE_INT64,
             FieldDescriptor.TYPE_UINT32, FieldDescriptor.TYPE_UINT64,
             FieldDescriptor.TYPE_SINT32, FieldDescriptor.TYPE_SINT64,
@@ -66,6 +75,7 @@ def _validate_score(src):
         if src.lstrip().startswith("lambda"):
             raise argparse.ArgumentTypeError(f"invalid score lambda: {error.msg}") from error
     return src
+
 
 def _score(metadata, score):
     if callable(score):
@@ -192,14 +202,6 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         self._scan_time = scan_time
 
 
-def _validate_selection(src):
-    try:
-        mate_selection.parse(src)
-    except Exception as error:
-        raise argparse.ArgumentTypeError(str(error)) from error
-    return src
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__
@@ -226,7 +228,7 @@ def parse_args():
         default="score",
         help=(
             "field used to score individuals (default: score); "
-            "numeric metadata fields, telemetry keys, or an arbitrary Python lambda expression"
+            "numeric metadata fields, telemetry keys, or lambda expression"
         ),
     )
 
