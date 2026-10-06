@@ -13,6 +13,7 @@ This program does not modify the population. Dead individuals are discarded.
 from concurrent import futures
 from pathlib import Path
 import argparse
+import ast
 import logging
 import threading
 import sys
@@ -21,31 +22,62 @@ import sys
 import grpc
 
 # First Party
+from google.protobuf.descriptor import FieldDescriptor
+
 from npc_maker import evolution_pb2, evolution_pb2_grpc
+from npc_maker import individual_pb2
 from npc_maker.individual import Individual
 import mate_selection
 
 
-def _score(metadata, field):
-    """
-    Return the score for a saved individual's metadata.
+def _compile_lambda(src):
+    tree = ast.parse(src, mode="eval")
+    if not isinstance(tree.body, ast.Lambda):
+        raise ValueError("score expression must be a lambda")
+    return eval(compile(tree, "<score>", "eval"), {"__builtins__": {}})
 
-    A Metadata field is preferred over telemetry. Lambda expressions are
-    evaluated with the metadata message as their sole argument.
-    """
-    if field.startswith("lambda"):
-        return float(eval(field)(metadata))
+def _is_lambda(src):
+    try:
+        tree = ast.parse(src, mode="eval")
+    except SyntaxError:
+        return False
+    return isinstance(tree.body, ast.Lambda)
 
+def _validate_score(src):
+    descriptor = individual_pb2.Metadata.DESCRIPTOR.fields_by_name
+    if src in descriptor:
+        field = descriptor[src]
+        numeric_types = {
+            FieldDescriptor.TYPE_DOUBLE, FieldDescriptor.TYPE_FLOAT,
+            FieldDescriptor.TYPE_INT32, FieldDescriptor.TYPE_INT64,
+            FieldDescriptor.TYPE_UINT32, FieldDescriptor.TYPE_UINT64,
+            FieldDescriptor.TYPE_SINT32, FieldDescriptor.TYPE_SINT64,
+            FieldDescriptor.TYPE_FIXED32, FieldDescriptor.TYPE_FIXED64,
+            FieldDescriptor.TYPE_SFIXED32, FieldDescriptor.TYPE_SFIXED64,
+        }
+        if field.label == FieldDescriptor.LABEL_REPEATED:
+            raise argparse.ArgumentTypeError(f"score field {src!r} is repeated")
+        if field.type not in numeric_types:
+            raise argparse.ArgumentTypeError(f"score field {src!r} is not numeric")
+        return src
+    try:
+        tree = ast.parse(src, mode="eval")
+    except SyntaxError as error:
+        if src.lstrip().startswith("lambda"):
+            raise argparse.ArgumentTypeError(f"invalid score lambda: {error.msg}") from error
+    return src
+
+def _score(metadata, score):
+    if callable(score):
+        return float(score(metadata))
     descriptor = metadata.DESCRIPTOR.fields_by_name
-    if field in descriptor:
-        if descriptor[field].has_presence and not metadata.HasField(field):
-            raise ValueError(f"metadata field {field!r} is not present")
-        return float(getattr(metadata, field))
-
-    if field in metadata.telemetry:
-        return float(metadata.telemetry[field])
-
-    raise ValueError(f"unrecognized score field {field!r}")
+    if score in descriptor:
+        if descriptor[score].has_presence and not metadata.HasField(score):
+            raise ValueError(f"metadata field {score!r} is not present")
+        return float(getattr(metadata, score))
+    if score in metadata.telemetry:
+        return float(metadata.telemetry[score])
+    raise ValueError(f"unrecognized score field {score!r}")
 
 
 class Player(evolution_pb2_grpc.EvolutionServicer):
@@ -58,7 +90,7 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         self._lock = threading.RLock()
 
         self._select = mate_selection.parse(selection)
-        self._score = score
+        self._score = _compile_lambda(score) if _is_lambda(score) else score
 
         # Paths to saved individuals.  These run parallel to _scores.
         self._members = []
@@ -160,6 +192,14 @@ class Player(evolution_pb2_grpc.EvolutionServicer):
         self._scan_time = scan_time
 
 
+def _validate_selection(src):
+    try:
+        mate_selection.parse(src)
+    except Exception as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+    return src
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__
@@ -173,6 +213,7 @@ def parse_args():
 
     parser.add_argument(
         "selection",
+        type=_validate_selection,
         help=(
             "mate selection specification, such as 'random', "
             "'proportional', or 'best=10'"
@@ -181,10 +222,11 @@ def parse_args():
 
     parser.add_argument(
         "--score",
+        type=_validate_score,
         default="score",
         help=(
             "field used to score individuals (default: score); "
-            "metadata fields, telemetry keys, or a lambda expression"
+            "numeric metadata fields, telemetry keys, or an arbitrary Python lambda expression"
         ),
     )
 
