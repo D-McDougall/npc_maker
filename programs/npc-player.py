@@ -1,4 +1,4 @@
-""" 
+"""
 Replay previously saved individuals through the NPC Maker's Evolution service.
 
 This presents a saved population through the Evolution API. Each Spawn request
@@ -76,7 +76,7 @@ def _validate_score(src):
     except SyntaxError as error:
         if src.lstrip().startswith("lambda"):
             raise argparse.ArgumentTypeError(
-                f"invalid score lambda: {error.msg}"
+                f"invalid score lambda-expression: {error.msg}"
             ) from error
     return src
 
