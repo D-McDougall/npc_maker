@@ -15,7 +15,6 @@ import json
 import socket
 import subprocess
 import sys
-import time
 from concurrent import futures
 from pathlib import Path
 
@@ -44,7 +43,7 @@ class LocalProcess:
 
         self.process = subprocess.Popen(command, cwd=cwd)
 
-    def close(self):
+    def __del__(self):
         if self.process.poll() is None:
             self.process.terminate()
             try:
@@ -62,13 +61,20 @@ class ServiceProcess(LocalProcess):
         # Note: By convention services accept "--listen HOST:PORT".
         command = [*command, "--listen", f"{host}:{port}"]
         super().__init__(command, cwd)
-        time.sleep(3)
         self.channel = grpc.insecure_channel(f"{host}:{port}")
+
+        # Block until the subprocess is ready to accept connections
+        try:
+            grpc.channel_ready_future(self.channel).result(timeout=30)
+        except grpc.FutureTimeoutError:
+            self.close()
+            raise RuntimeError(f"gRPC service timeout: {command}")
+
         self.stub = stub_class(self.channel)
 
-    def close(self):
+    def __del__(self):
         self.channel.close()
-        super().close()
+        super().__del__()
 
 
 class NpcServer(environment_pb2_grpc.EnvironmentServicer):
@@ -293,11 +299,6 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         command.append(self.listen)
         self.environment = LocalProcess(command)
 
-    def close(self):
-        self.environment.close()
-        for process in reversed(self.processes):
-            process.close()
-
 
 def _free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -342,7 +343,7 @@ def main():
         pass
     finally:
         server.stop(0).wait()
-        program.close()
+        del program
 
     return 1 if program.failed else 0
 

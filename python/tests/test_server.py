@@ -53,7 +53,7 @@ def test_server():
         )
 
         try:
-            time.sleep(1)
+            time.sleep(10)
 
             if process.poll() is not None:
                 stdout, stderr = process.communicate()
