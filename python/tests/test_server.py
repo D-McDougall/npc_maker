@@ -69,14 +69,17 @@ def test_server():
         finally:
             if process.poll() is None:
                 process.terminate()
-                try:
-                    stdout, stderr = process.communicate(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    stdout, stderr = process.communicate()
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
 
             if stderr:
                 raise AssertionError(
                     "npc-server wrote to stderr:\n"
                     f"{stderr.decode()}"
                 )
+
+if __name__ == "__main__":
+    test_server()
