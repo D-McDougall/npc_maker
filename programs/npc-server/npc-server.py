@@ -319,13 +319,16 @@ def load_config(path):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG,
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="enable DEBUG logging")
     parser.add_argument("config", type=Path, help="experiment configuration (JSON)")
     parser.add_argument("save_dir", type=Path, help="directory for persistence")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     host = "127.0.0.1"
     port = _free_port()
