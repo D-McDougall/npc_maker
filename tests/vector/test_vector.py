@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Run the vector optimization experiment."""
+"""
+Run the vector optimization experiment.
+"""
 
 import argparse
 import json
@@ -9,35 +11,19 @@ import tempfile
 from pathlib import Path
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "dimension",
-        type=int,
-        help="Number of dimensions in the target vector",
-    )
-    parser.add_argument(
-        "seed",
-        type=int,
-        help="Seed used to generate the target vector",
-    )
-    args = parser.parse_args()
+def test_vector(dimension, seed):
 
-    if args.dimension <= 0:
-        parser.error("dimension must be greater than zero")
-
-    root = Path(__file__).resolve().parents[2]
-    environment = root / "tests" / "vector" / "env.py"
-    genetics = root / "tests" / "vector" / "vector_genetics.py"
+    environment = Path(__file__).with_name("vector_env.py")
+    genetics    = Path(__file__).with_name("vector_genetics.py")
 
     config = {
         "name": "vector test",
-        "description": "Minimal vector optimization experiment",
+        "description": f"Vector optimization experiment ({dimension}, {seed})",
         "environment": [
             sys.executable,
             str(environment),
-            str(args.dimension),
-            str(args.seed),
+            str(dimension),
+            str(seed),
         ],
         "organisms": [
             {
@@ -45,7 +31,7 @@ def main():
                 "genetics": [
                     sys.executable,
                     str(genetics),
-                    str(args.dimension),
+                    str(dimension),
                 ],
                 # Evolution is intentionally omitted. The NPC server will
                 # request founder individuals from the genetics service.
@@ -61,14 +47,12 @@ def main():
             encoding="utf-8",
         )
 
-        return subprocess.run(
-            [
-                "npc-server.py",
-                str(config_file),
-                str(directory / "server-data"),
-            ]
-        ).returncode
+        return subprocess.run([
+            "npc-server.py",
+            str(config_file),
+            str(directory / "server-data"),
+        ]).returncode
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(test_vector(2, 0x5EED))

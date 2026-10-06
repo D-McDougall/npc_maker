@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-"""Vector genetics service.
+"""
+Vector genetics service.
 
 Implements reproduction for the vector optimization test environment. Genomes
 and phenomes are JSON arrays of numbers, with the phenome copied directly from
