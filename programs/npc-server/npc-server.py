@@ -29,26 +29,21 @@ from npc_maker import genetics_pb2, genetics_pb2_grpc
 from npc_maker.individual import Individual
 
 
-class ServiceProcess:
+class LocalProcess:
     """
-    A configured local gRPC service and its subprocess.
+    Run a local subprocess.
     """
-    def __init__(self, command, stub_class, host, port, cwd=None):
+    def __init__(self, command, cwd=None):
         command = list(command)
         if not command:
-            raise ValueError("empty service command")
+            raise ValueError("empty command")
 
         if cwd is not None:
             Path(cwd).mkdir(parents=True, exist_ok=True)
 
-        # NOTE: Conventional services accept "--listen HOST:PORT".
-        command += ["--listen", f"{host}:{port}"]
         self.process = subprocess.Popen(command, cwd=cwd)
-        self.channel = grpc.insecure_channel(f"{host}:{port}")
-        self.stub = stub_class(self.channel)
 
     def close(self):
-        self.channel.close()
         if self.process.poll() is None:
             self.process.terminate()
             try:
@@ -56,6 +51,22 @@ class ServiceProcess:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+
+
+class ServiceProcess(LocalProcess):
+    """
+    Run a local gRPC service.
+    """
+    def __init__(self, command, stub_class, host, port, cwd=None):
+        # Note: By convention services accept "--listen HOST:PORT".
+        command += ["--listen", f"{host}:{port}"]
+        super().__init__(command, cwd)
+        self.channel = grpc.insecure_channel(f"{host}:{port}")
+        self.stub = stub_class(self.channel)
+
+    def close(self):
+        self.channel.close()
+        super().close()
 
 
 class NpcServer(environment_pb2_grpc.EnvironmentServicer):
@@ -259,24 +270,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         """
         Start the single environment instance configured by the experiment.
         """
-        command = list(self.config.environment)
-        if not command:
-            raise ValueError("experiment environment command is empty")
-        self.environment = subprocess.Popen(command)
+        self.environment = LocalProcess(self.config.environment)
 
     def close(self):
-        if self.environment is not None:
-            if self.environment.poll() is None:
-                self.environment.terminate()
-                try:
-                    self.environment.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    self.environment.kill()
-                    self.environment.wait()
-            self.environment = None
-
         for process in reversed(self.processes):
             process.close()
+        self.environment.close()
 
 
 def _free_port():
@@ -294,10 +293,6 @@ def load_config(path):
 def main():
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
     parser.add_argument("filename", help="experiment configuration (JSON)")
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="address on which to serve the environment API")
-    parser.add_argument("--port", type=int, default=47000,
-                        help="port on which to serve the environment API")
     args = parser.parse_args()
 
     try:
