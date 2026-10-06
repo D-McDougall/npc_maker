@@ -24,27 +24,16 @@ def main():
 
     living = {}
 
-    def random_string(length=8):
-        return "".join(
-            random.choices(string.ascii_letters + string.digits, k=length)
-        )
-
     def spawn():
         individual = environment.Spawn(environment_pb2.SpawnRequest())
         living[individual.metadata.name] = individual
 
     def mate():
-        parent = random.choice(list(living.values()))
-        compatible = [
-            individual
-            for individual in living.values()
-            if individual.metadata.body_type == parent.metadata.body_type
-            and individual.metadata.name != parent.metadata.name
+        num_parents = random.choice(range(4))
+        parents = [
+            random.choice(list(living.values()))
+            for _ in range(num_parents)
         ]
-        parents = [parent.metadata.name]
-        if compatible and random.choice([True, False]):
-            parents.append(random.choice(compatible).metadata.name)
-
         individual = environment.Mate(
             environment_pb2.MateRequest(parents=parents)
         )
@@ -55,7 +44,7 @@ def main():
         environment.Score(
             environment_pb2.ScoreRequest(
                 name=individual.metadata.name,
-                score=random.uniform(-100.0, 100.0),
+                score=random.choice(range(3)),
             )
         )
 
@@ -66,8 +55,8 @@ def main():
                 name=individual.metadata.name,
                 data=[
                     environment_pb2.KeyValue(
-                        key=random_string(),
-                        value=random_string(),
+                        key=random.choice("ABC"),
+                        value=random.choice("123"),
                     )
                 ],
             )
