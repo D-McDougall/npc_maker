@@ -3,13 +3,14 @@ PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PYTHON_OUT  := python/npc_maker/
 PYTHON      := venv/bin/python3
 PIP         := venv/bin/pip3
+PYTEST      := venv/bin/pytest
 
 .PHONY: all venv python rust-toolchain rust package install clean
 
 all: package
 
 venv:
-	test -d venv || $(PYTHON) -m venv venv # Create venv if it doesn't exist
+	test -d venv || python3 -m venv venv # Create venv if it doesn't exist
 	$(PIP) install -r requirements.txt
 	$(PIP) install build twine pytest # Python development dependencies
 
@@ -47,8 +48,8 @@ install: package
 
 test: install
 	cargo test
-	pytest python
-	pytest tests
+	$(PYTEST) python
+	$(PYTEST) tests
 
 clean:
 	rm -rf $(PYTHON_OUT)/*_pb2.py 	  	# protobuf
