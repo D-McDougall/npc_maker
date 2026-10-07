@@ -30,7 +30,7 @@ service Diagnostics {
   /*
   gRPC call counter for Telementry requests.
   */
-  rpc TelementryCount(Organism) returns (Count);
+  rpc TelemetryCount(Organism) returns (Count);
 
   /*
   gRPC call counter for Death requests.
@@ -38,7 +38,7 @@ service Diagnostics {
   rpc DeathCount(Organism) returns (Count);
 
   /*
-  Maximum recorded score.
+  Maximum score over all historical records for an organism type.
   */
   rpc MaximumScore(Organism) returns (Score);
 }
