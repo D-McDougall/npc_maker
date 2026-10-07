@@ -399,6 +399,9 @@ def main():
     parser = argparse.ArgumentParser(prog="npc-server.py", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="enable DEBUG logging")
+    parser.add_argument("--listen", metavar="HOST:PORT",
+                        help="address to serve the Environment and Diagnostics "
+                             "services on (default: a free port on 127.0.0.1)")
     parser.add_argument("config", type=Path, help="experiment configuration (JSON)")
     parser.add_argument("save_dir", type=Path, help="directory for persistence")
     args = parser.parse_args()
@@ -407,9 +410,7 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    host = "127.0.0.1"
-    port = _free_port()
-    listen = f"{host}:{port}"
+    listen = args.listen or f"127.0.0.1:{_free_port()}"
 
     try:
         config = load_config(args.config)
@@ -424,21 +425,29 @@ def main():
     environment_pb2_grpc.add_EnvironmentServicer_to_server(program, server)
     diagnostics_pb2_grpc.add_DiagnosticsServicer_to_server(
         DiagnosticsServer(program), server)
-    server.add_insecure_port(listen)
+    try:
+        bound_port = server.add_insecure_port(listen)
+    except RuntimeError as error:
+        print(f"{type(error).__name__}: {error}", file=sys.stderr)
+        return 7
+    # If the requested port was 0 then the OS chose one, so report the real one.
+    listen = f"{listen.rpartition(':')[0]}:{bound_port}"
     program.server = server
     program.listen = listen
 
     try:
         server.start()
+        logging.info("Serving Environment and Diagnostics on %s", listen)
         program.start_environment()
         server.wait_for_termination()
     except KeyboardInterrupt:
         pass
     finally:
         server.stop(0).wait()
+        failed = program.failed
         del program
 
-    return 1 if program.failed else 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
