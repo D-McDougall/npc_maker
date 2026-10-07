@@ -13,7 +13,7 @@ from pathlib import Path
 
 def test_vector(dimension, seed):
 
-    environment = Path(__file__).with_name("vector_env.py")
+    environment = Path(__file__).with_name("vector_environment.py")
     genetics    = Path(__file__).with_name("vector_genetics.py")
 
     config = {
