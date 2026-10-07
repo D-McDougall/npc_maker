@@ -6,8 +6,11 @@ This starts an npc-server running the vector environment, and then monitors the
 experiment through the server's Diagnostics service. The experiment ends when
 either:
 
-  * The maximum score rises above SCORE_THRESHOLD. This is success.
-  * The number of dead individuals rises above DEATH_LIMIT. This is failure.
+  * The maximum score rises above the score limit. This is success.
+  * The number of dead individuals rises above the death limit. This is failure.
+
+The limits are arguments to run_vector(), so that this program can be used as a
+fixture by other tests. SCORE_LIMIT and DEATH_LIMIT are the default values.
 
 Failure also covers the server exiting on its own, and exceeding TIMEOUT, which
 is a safety net so that a stuck experiment can not hang forever. In every case
@@ -21,11 +24,13 @@ dimensions it is not expected to.
 Requires a POSIX system, and `npc-server.py` must be on the PATH.
 
 Usage: test_vector.py [--dimension N] [--seed SEED]
+                      [--score-limit SCORE] [--death-limit COUNT]
        pytest test_vector.py
 """
 
 import argparse
 import json
+import math
 import os
 import signal
 import socket
@@ -42,7 +47,7 @@ from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 DIMENSION        = 2
 SEED             = 0x5EED
 BODY_TYPE        = "vector"
-SCORE_THRESHOLD  = 0.99     # Success if the maximum score rises above this.
+SCORE_LIMIT      = 0.99     # Success if the maximum score rises above this.
 DEATH_LIMIT      = 10_000   # Failure if the number of dead rises above this.
 TIMEOUT          = 300.0    # Failure if the experiment takes longer (seconds).
 POLL_INTERVAL    = 0.5      # Time between diagnostic polls (seconds).
@@ -105,9 +110,12 @@ def _connect(address, server):
                 raise RuntimeError("timed out waiting for npc-server to start")
 
 
-def _monitor(diagnostics, server, started):
+def _monitor(diagnostics, server, started, score_limit, death_limit):
     """
     Poll the diagnostics until the experiment succeeds or fails.
+
+    The experiment succeeds when the maximum score rises above score_limit, and
+    fails when the number of dead individuals rises above death_limit.
 
     Returns a (success, message) pair.
     """
@@ -131,10 +139,10 @@ def _monitor(diagnostics, server, started):
 
         # Success is checked first, so if both limits are crossed within the
         # same poll then the experiment counts as a success.
-        if best > SCORE_THRESHOLD:
-            return True, f"maximum score exceeded {SCORE_THRESHOLD} ({summary})"
-        if deaths > DEATH_LIMIT:
-            return False, f"more than {DEATH_LIMIT} individuals died ({summary})"
+        if best > score_limit:
+            return True, f"maximum score exceeded {score_limit} ({summary})"
+        if deaths > death_limit:
+            return False, f"more than {death_limit} individuals died ({summary})"
         if elapsed > TIMEOUT:
             return False, f"timed out after {TIMEOUT:.0f}s ({summary})"
 
@@ -206,9 +214,17 @@ def _shutdown(server):
     return problems
 
 
-def run_vector(dimension=DIMENSION, seed=SEED):
+def run_vector(dimension=DIMENSION, seed=SEED,
+               score_limit=SCORE_LIMIT, death_limit=DEATH_LIMIT):
     """
     Run the experiment. Returns a (success, message) pair.
+
+    Arguments:
+      dimension:   Number of dimensions of the target vector.
+      seed:        Random seed which generates the target vector.
+      score_limit: The experiment succeeds if the maximum score rises above this.
+      death_limit: The experiment fails if the number of dead individuals rises
+                   above this.
     """
     with tempfile.TemporaryDirectory(prefix="npc-vector-") as directory:
         directory = Path(directory)
@@ -234,7 +250,8 @@ def run_vector(dimension=DIMENSION, seed=SEED):
         try:
             started = time.monotonic()
             channel, diagnostics = _connect(address, server)
-            success, message = _monitor(diagnostics, server, started)
+            success, message = _monitor(
+                diagnostics, server, started, score_limit, death_limit)
         except RuntimeError as error:
             success, message = False, str(error)
         finally:
@@ -252,7 +269,7 @@ def run_vector(dimension=DIMENSION, seed=SEED):
 
 
 def test_vector():
-    success, message = run_vector()
+    success, message = run_vector(DIMENSION, SEED, SCORE_LIMIT, DEATH_LIMIT)
     assert success, message
 
 
@@ -262,11 +279,22 @@ def main():
                         help="number of target dimensions (default: %(default)s)")
     parser.add_argument("--seed", type=lambda s: int(s, 0), default=SEED,
                         help="seed used to generate the target (default: %(default)#x)")
+    parser.add_argument("--score-limit", type=float, default=SCORE_LIMIT,
+                        help="succeed when the maximum score rises above this "
+                             "(default: %(default)s)")
+    parser.add_argument("--death-limit", type=int, default=DEATH_LIMIT,
+                        help="fail when the number of dead individuals rises "
+                             "above this (default: %(default)s)")
     args = parser.parse_args()
     if args.dimension <= 0:
         parser.error("dimension must be greater than zero")
+    if math.isnan(args.score_limit):
+        parser.error("score limit must be a number")
+    if args.death_limit < 0:
+        parser.error("death limit must not be negative")
 
-    success, message = run_vector(args.dimension, args.seed)
+    success, message = run_vector(
+        args.dimension, args.seed, args.score_limit, args.death_limit)
     print(f"{'SUCCESS' if success else 'FAILURE'}: {message}")
     return 0 if success else 1
 
