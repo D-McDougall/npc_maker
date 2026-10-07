@@ -275,7 +275,7 @@ def test_vector():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--dimension", type=int, default=DIMENSION,
+    parser.add_argument("-d", "--dimension", type=int, default=DIMENSION,
                         help="number of target dimensions (default: %(default)s)")
     parser.add_argument("--seed", type=lambda s: int(s, 0), default=SEED,
                         help="seed used to generate the target (default: %(default)#x)")

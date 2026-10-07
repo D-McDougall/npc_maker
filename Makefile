@@ -1,8 +1,8 @@
-PROTO_DIR  	:= proto
+PROTO_DIR   := proto
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
-PYTHON_OUT 	:= python/npc_maker/
-PYTHON  	:= venv/bin/python
-PIP 		:= venv/bin/pip
+PYTHON_OUT  := python/npc_maker/
+PYTHON      := venv/bin/python3
+PIP         := venv/bin/pip3
 
 .PHONY: all venv python rust-toolchain rust package install clean
 
