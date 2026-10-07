@@ -11,9 +11,11 @@ Instead it starts a single instance of the environment.
 """
 
 import argparse
+import collections
 import datetime
 import json
 import logging
+import math
 import socket
 import subprocess
 import sys
@@ -23,6 +25,7 @@ from pathlib import Path
 import grpc
 from google.protobuf import json_format
 
+from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
@@ -95,6 +98,11 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         self.failed = False
         self.listen = None # Listen address of this service as "host:port" string
 
+        # Diagnostics, tracked per body type. These are only ever accessed from
+        # the gRPC worker thread (the server has max_workers=1), so no locking.
+        self.call_counts = collections.defaultdict(collections.Counter)
+        self.max_scores = {} # Absent until the first score is reported.
+
         self.organisms = {
             organism.body_type: organism
             for organism in config.organisms
@@ -133,6 +141,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         except KeyError:
             raise ValueError(f'unknown body type "{body_type}"')
 
+    def _count(self, call, body_type):
+        """
+        Increment a diagnostic call counter, for the given body type.
+        """
+        self.call_counts[body_type][call] += 1
+
     def _set_defaults(self, individual: Individual):
         body_type = self._body_type(individual.body_type)
         if not individual.body_type:
@@ -161,6 +175,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def Spawn(self, request, context):
         logging.debug("Spawn request received:\n%s", request)
         body_type = self._body_type(request.body_type)
+        self._count("Spawn", body_type)
         parents = []
 
         if body_type in self.evolution:
@@ -195,6 +210,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         if not request.parents:
             raise ValueError("at least one parent is required")
 
+        # The body type of a mating is the body type of its first parent.
+        body_type = self._body_type(self._living(request.parents[0]).body_type)
+        self._count("Mate", body_type)
+
         # Access and load the requested parents.
         parents = []
         for name in request.parents:
@@ -202,8 +221,6 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             path = self._living_path(metadata.name)
             individual = Individual.load(path)
             parents.append(individual)
-
-        body_type = self._body_type(parents[0].body_type)
 
         # Apply the genetic algorithm.
         if body_type in self.genetics:
@@ -227,6 +244,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def Score(self, request, context):
         logging.debug("Score request received:\n%s", request)
         metadata = self._living(request.name)
+        body_type = self._body_type(metadata.body_type)
+        self._count("Score", body_type)
+        # NaN is unordered and would poison the running maximum, so skip it.
+        if not math.isnan(request.score):
+            high_score = self.max_scores.get(body_type, -math.inf)
+            self.max_scores[body_type] = max(request.score, high_score)
         metadata.score = request.score
         self._save_metadata(metadata)
         return environment_pb2.ScoreResponse()
@@ -234,6 +257,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
     def Telemetry(self, request, context):
         logging.debug("Telemetry request received:\n%s", request)
         metadata = self._living(request.name)
+        self._count("Telemetry", self._body_type(metadata.body_type))
         for item in request.data:
             metadata.telemetry[item.key] = item.value
         self._save_metadata(metadata)
@@ -257,6 +281,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         # Load the individual and update its metadata.
         metadata = self._living(request.name)
         body_type = self._body_type(metadata.body_type)
+        self._count("Death", body_type)
         path = self._living_path(metadata.name)
         individual = Individual.load(path)
         individual.death_date = datetime.datetime.now()
@@ -306,6 +331,58 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         self.environment = LocalProcess(command)
 
 
+class DiagnosticsServer(diagnostics_pb2_grpc.DiagnosticsServicer):
+    """
+    Implementation of the Diagnostics service.
+
+    This is a read-only view of the NpcServer's state, and is served on the
+    same port as the Environment service.
+    """
+    def __init__(self, npc_server):
+        self.npc_server = npc_server
+
+    def _body_type(self, request, context):
+        try:
+            return self.npc_server._body_type(request.body_type)
+        except ValueError as error:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+
+    def _call_count(self, call, request, context):
+        body_type = self._body_type(request, context)
+        return diagnostics_pb2.Count(
+            count=self.npc_server.call_counts[body_type][call])
+
+    def LivingCount(self, request, context):
+        body_type = self._body_type(request, context)
+        count = sum(
+            1 for metadata in self.npc_server.living.values()
+            if metadata.body_type == body_type)
+        return diagnostics_pb2.Count(count=count)
+
+    def SpawnCount(self, request, context):
+        return self._call_count("Spawn", request, context)
+
+    def MateCount(self, request, context):
+        return self._call_count("Mate", request, context)
+
+    def ScoreCount(self, request, context):
+        return self._call_count("Score", request, context)
+
+    def TelemetryCount(self, request, context):
+        return self._call_count("Telemetry", request, context)
+
+    def DeathCount(self, request, context):
+        return self._call_count("Death", request, context)
+
+    def MaximumScore(self, request, context):
+        body_type = self._body_type(request, context)
+        try:
+            score = self.npc_server.max_scores[body_type]
+        except KeyError:
+            score = -math.inf
+        return diagnostics_pb2.Score(score=score)
+
+
 def _free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -345,6 +422,8 @@ def main():
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     environment_pb2_grpc.add_EnvironmentServicer_to_server(program, server)
+    diagnostics_pb2_grpc.add_DiagnosticsServicer_to_server(
+        DiagnosticsServer(program), server)
     server.add_insecure_port(listen)
     program.server = server
     program.listen = listen
