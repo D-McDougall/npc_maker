@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package diagnostics;
+
+/*
+Diagnostic interface for npc-server
+*/
+service Diagnostics {
+
+  /*
+  Number of individuals in the environment.
+  */
+  rpc LivingCount(Organism) returns (Count);
+
+  /*
+  gRPC call counter for Spawn requests.
+  */
+  rpc SpawnCount(Organism) returns (Count);
+
+  /*
+  gRPC call counter for Mate requests.
+  */
+  rpc MateCount(Organism) returns (Count);
+
+  /*
+  gRPC call counter for Score requests.
+  */
+  rpc ScoreCount(Organism) returns (Count);
+
+  /*
+  gRPC call counter for Telementry requests.
+  */
+  rpc TelementryCount(Organism) returns (Count);
+
+  /*
+  gRPC call counter for Death requests.
+  */
+  rpc DeathCount(Organism) returns (Count);
+
+  /*
+  Maximum recorded score.
+  */
+  rpc MaximumScore(Organism) returns (Score);
+}
+
+/*
+Organism identifier.
+
+All diagnostics are tracked per organism type.
+*/
+message Organism {
+  string body_type = 1;
+}
+
+/*
+gRPC call count.
+*/
+message Count {
+  uint64 count = 1;
+}
+
+/*
+Maximum score value received
+*/
+message Score {
+  double score = 1;
+}
