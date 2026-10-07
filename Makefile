@@ -4,6 +4,7 @@ PYTHON_OUT  := python/npc_maker/
 PYTHON      := venv/bin/python3
 PIP         := venv/bin/pip3
 PYTEST      := venv/bin/pytest
+export PATH := $(CURDIR)/venv/bin:$(PATH)
 
 .PHONY: all venv python rust-toolchain rust package install clean
 
