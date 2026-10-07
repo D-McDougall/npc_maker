@@ -270,6 +270,13 @@ class Individual:
     # Metadata fields, see proto/individual.proto for the authoritative documentation.
 
     @property
+    def metadata(self) -> object:
+        """
+        Human readable / non-genetic information about an individual.
+        """
+        return self._message.metadata
+
+    @property
     def name(self) -> str:
         """
         This individual's name, which is a UUID string.
@@ -399,7 +406,7 @@ class Individual:
         directory = path.joinpath(name)
         # Do not allow overwrite
         if directory.exists():
-            raise ValueError(f"Individual already saved: {directory}")
+            raise FileExistsError(f"Individual already saved: {directory}")
         directory.mkdir()
         try:
             metadata = json_format.MessageToJson(

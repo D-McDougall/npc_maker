@@ -234,7 +234,7 @@ def test_save_metadata(tmp_path):
 
     individual.score = 2.0
     individual.environment = "changed"
-    individual.save_metadata(directory)
+    Individual.save_metadata(individual.metadata, directory)
 
     loaded = Individual.load(directory)
     assert loaded.score == 2.0
@@ -245,7 +245,7 @@ def test_save_metadata(tmp_path):
 def test_save_metadata_requires_existing_metadata(tmp_path):
     individual = make()
     with pytest.raises(FileNotFoundError):
-        individual.save_metadata(tmp_path / "missing")
+        individual.save_metadata(individual.metadata, tmp_path / "missing")
 
 
 def test_save_does_not_overwrite(tmp_path):

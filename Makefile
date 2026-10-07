@@ -45,6 +45,11 @@ package: python rust
 install: package
 	$(PIP) install --force-reinstall dist/npc_maker-*.whl
 
+test: install
+	cargo test
+	pytest python
+	pytest tests
+
 clean:
 	rm -rf $(PYTHON_OUT)/*_pb2.py 	  	# protobuf
 	rm -rf $(PYTHON_OUT)/*_pb2_grpc.py 	# protobuf
