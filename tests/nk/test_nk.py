@@ -4,20 +4,17 @@
 This starts an npc-server using the NK environment and monoploid binary
 genetics, then monitors the experiment through the server's Diagnostics
 service. The experiment succeeds when the maximum score rises above the score
-limit and fails when the death limit or timeout is exceeded. The server and
-all of its subprocesses are shut down before returning.
-
-Requires a POSIX system, and ``npc-server.py`` and ``npc-evo`` on the PATH.
+limit and fails when the death limit or timeout is exceeded.
 
 Usage: test_nk.py [--n N] [--k K] [--seed SEED]
                                 [--score-limit SCORE] [--death-limit COUNT]
+                                [--evoultion COMMAND]
        pytest test_nk.py
 """
 
 import argparse
 import json
 import math
-import os
 import signal
 import socket
 import subprocess
@@ -39,8 +36,8 @@ DEATH_LIMIT        = 10_000
 EVOLUTION          = "npc-evo -p 100".split()
 TIMEOUT            = 300.0  # Five minutes.
 POLL_INTERVAL      = 0.5
-STARTUP_TIMEOUT    = 60.0
-SHUTDOWN_TIMEOUT   = 15.0
+STARTUP_TIMEOUT    = 30.0
+SHUTDOWN_TIMEOUT   = 3.0
 
 
 def _free_port():
@@ -52,8 +49,7 @@ def _free_port():
 def _make_config(n, k, seed, evolution):
     here = Path(__file__).parent
     return {
-        "name": "monoploid binary NK test",
-        "description": f"Binary NK experiment (N={n}, K={k}, seed={seed})",
+        "name": f"NK experiment (N={n}, K={k}, seed={seed}, evo={EVOLUTION})",
         "environment": [
             sys.executable,
             str(here / "nk_environment.py"),
@@ -66,7 +62,7 @@ def _make_config(n, k, seed, evolution):
                 "body_type": BODY_TYPE,
                 "genetics": [
                     sys.executable,
-                    str(here / "monoploid.py"),
+                    str(here / "nk_genetics.py"),
                     str(n),
                 ],
                 "evolution": evolution,
@@ -129,47 +125,39 @@ def _monitor(diagnostics, server, started, score_limit, death_limit):
         time.sleep(POLL_INTERVAL)
 
 
-def _group_is_empty(group, timeout):
-    """Wait up to timeout seconds for every process in a process group to exit."""
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            os.killpg(group, 0)
-        except ProcessLookupError:
-            return True
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.05)
-
-
 def _shutdown(server):
-    """Stop npc-server and its subprocesses, returning any cleanup problems."""
+    """Best-effort stop of npc-server using portable subprocess operations."""
     problems = []
-    group = server.pid
+    if server.poll() is not None:
+        if server.returncode != 0:
+            problems.append(f"npc-server exited with status {server.returncode}")
+        return problems
 
-    if server.poll() is None:
+    # SIGINT gives npc-server a chance to shut down cleanly where supported.
+    try:
         server.send_signal(signal.SIGINT)
+    except (OSError, ValueError):
+        pass
+    graceful = False
+    try:
+        server.wait(timeout=SHUTDOWN_TIMEOUT)
+        graceful = True
+    except subprocess.TimeoutExpired:
+        problems.append("npc-server did not exit after SIGINT")
+        try:
+            server.terminate()
+        except OSError:
+            pass
         try:
             server.wait(timeout=SHUTDOWN_TIMEOUT)
         except subprocess.TimeoutExpired:
-            problems.append("npc-server did not exit after SIGINT")
-            server.terminate()
             try:
-                server.wait(timeout=SHUTDOWN_TIMEOUT)
-            except subprocess.TimeoutExpired:
                 server.kill()
-                server.wait()
-        else:
-            if server.returncode != 0:
-                problems.append(f"npc-server exited with status {server.returncode}")
-
-    grace = 1.0 if server.returncode < 0 else SHUTDOWN_TIMEOUT
-    if not _group_is_empty(group, grace):
-        problems.append("subprocesses of npc-server were left running")
-    try:
-        os.killpg(group, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+                server.wait(timeout=SHUTDOWN_TIMEOUT)
+            except OSError:
+                problems.append("could not force-stop npc-server")
+    if graceful and server.returncode != 0:
+        problems.append(f"npc-server exited with status {server.returncode}")
     return problems
 
 
@@ -193,7 +181,6 @@ def run_nk(n=N, k=K, seed=SEED, score_limit=SCORE_LIMIT,
                 str(config_file),
                 str(directory / "server-data"),
             ],
-            start_new_session=True,
         )
 
         channel = None
@@ -234,6 +221,8 @@ def main():
                              "(default: %(default)s)")
     parser.add_argument("--death-limit", type=int, default=DEATH_LIMIT,
                         help="fail when deaths exceed this (default: %(default)s)")
+    parser.add_argument("--evoultion", default=" ".join(EVOLUTION),
+                        help="evolution service command (default: %(default)s)")
     args = parser.parse_args()
 
     if args.n <= 0:
@@ -246,7 +235,8 @@ def main():
         parser.error("death limit must not be negative")
 
     success, message = run_nk(
-        args.n, args.k, args.seed, args.score_limit, args.death_limit, EVOLUTION)
+        args.n, args.k, args.seed, args.score_limit, args.death_limit,
+        args.evoultion.split())
     print(f"{'SUCCESS' if success else 'FAILURE'}: {message}")
     return 0 if success else 1
 
