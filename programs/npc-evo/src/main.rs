@@ -151,10 +151,19 @@ mod tests {
         let broken_requests = vec![
             ("missing individual", DeathRequest { individual: None }),
             (
+                "missing metadata",
+                DeathRequest {
+                    individual: Some(Individual {
+                        metadata: Default::default(),
+                        ..Default::default()
+                    }),
+                },
+            ),
+            (
                 "missing name",
                 DeathRequest {
                     individual: Some(Individual {
-                        metadata: Some(Default::default()),
+                        metadata: Some(Metadata { ..Default::default() }),
                         ..Default::default()
                     }),
                 },
@@ -192,7 +201,7 @@ mod tests {
                 },
             ),
         ];
-
+        // panic!("TEST CASES: {broken_requests:#?}");
         for (description, request) in broken_requests {
             // Isolate each request so one panic cannot poison the service mutex
             // and obscure whether later malformed requests are handled safely.

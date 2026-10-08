@@ -271,6 +271,10 @@ impl Evolution {
             match flag.as_str() {
                 "-p" | "--population" => {
                     let value: usize = args.remove(0).parse().unwrap();
+                    if value == 0 {
+                        eprintln!("Error: population size must be greater than zero");
+                        std::process::exit(1);
+                    }
                     update |= value != self.population_size;
                     self.population_size = value;
                 }
@@ -482,10 +486,12 @@ impl Evolution {
     pub fn death(&mut self, request: DeathRequest) -> Result<(), Status> {
         // Bookkeeping on the Individual
         let Some(mut individual) = request.individual else {
-            return Err(Status::invalid_argument("missing metadata"));
+            return Err(Status::invalid_argument("missing individual"));
         };
         {
-            let metadata = individual.metadata.as_mut().unwrap();
+            let Some(metadata) = individual.metadata.as_mut() else {
+                return Err(Status::invalid_argument("missing metadata"));
+            };
             if metadata.ascension.is_some() {
                 return Err(Status::invalid_argument("already dead"));
             }
