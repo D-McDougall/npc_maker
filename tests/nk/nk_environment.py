@@ -53,6 +53,17 @@ class NKLandscape:
             for _ in range(n)
         )
 
+        self.max_score = self.maximum_achievable_score()
+
+    def maximum_achievable_score(self):
+        """Return the mean of the per-locus maximum table contributions.
+
+        This is an upper bound on the best score: the gene values that
+        maximize different loci may be incompatible, so the bound need not
+        be achievable by a single phenome.
+        """
+        return sum(max(table) for table in self.tables) / self.n
+
     def evaluate(self, phenome):
         """Return mean fitness for N numeric alleles in the range [0, 1]."""
         if len(phenome) != self.n:
@@ -89,7 +100,10 @@ class NKLandscape:
         # interpolated contribution is a weighted average of values in [0, 1],
         # the overall score is also in [0, 1]. At binary phenomes this reduces
         # to the usual NK lookup of one table entry per locus.
-        return total / self.n
+        score = total / self.n
+
+        # Normalize the score into the range [0, 1].
+        return score / self.max_score
 
 
 def make_landscape(n, k, seed):

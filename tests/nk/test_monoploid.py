@@ -66,7 +66,7 @@ def _make_config(n, k, seed, evolution):
                 "body_type": BODY_TYPE,
                 "genetics": [
                     sys.executable,
-                    str(here / "monoploid_binary.py"),
+                    str(here / "monoploid.py"),
                     str(n),
                 ],
                 "evolution": evolution,
