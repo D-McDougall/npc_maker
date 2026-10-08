@@ -20,6 +20,12 @@ pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub const HELP: &'static str = r#"Evolutionary algorithms for the NPC Maker
 
+USAGE: npc-evo [PATH] [OPTIONS]
+
+PATH:
+    The npc-evo program saves the current population to this directory,
+    and evolution can be restarted by passing in an existing directory.
+
 SERVER OPTIONS:
     --host <ADDRESS>              Bind to host address
     --port <PORT>                 Bind to port number
