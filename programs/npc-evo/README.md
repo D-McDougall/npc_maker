@@ -6,7 +6,7 @@ Individuals are added to the population by the "death" method,
 and the state of the population is queried by the "spawn" method,
 which requests parents for mating.
 
-Features:
+### Features:
 * Many strategies for selecting individuals to spawn
 * Many strategies for replacing individuals on death
 * Persistent save files

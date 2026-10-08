@@ -110,6 +110,10 @@ impl ServerOptions {
         if (this.host.is_some() || this.port.is_some()) && this.listen.is_some() {
             exit_error!(4, "Error: options --host & --port are incompatible with --listen");
         }
+        // TLS is not implemented. Refuse to start rather than silently serve plaintext.
+        if this.tls_cert.is_some() || this.tls_key.is_some() {
+            exit_error!(6, "Error: TLS is not implemented, remove --tls-cert and --tls-key");
+        }
         // Prepare the listen option
         if this.listen.is_none() {
             let host = this.host.as_ref().map(String::as_str).unwrap_or("127.0.0.1");

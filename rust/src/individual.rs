@@ -300,7 +300,7 @@ mod tests {
             phenome,
         };
 
-        let path = temp_dir().join("individual");
+        let path = temp_dir().join(format!("npc-individual-{:x}", rand::random::<u32>()));
 
         individual.save(&path).unwrap();
 

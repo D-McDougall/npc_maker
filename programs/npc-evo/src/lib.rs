@@ -196,8 +196,24 @@ impl Evolution {
             // Update the save file with the new parameters
             this.save()?;
         }
+        if this.verbose {
+            eprintln!(
+                "npc-evo: path={} population={} replacement={:?} selection={} parents={} \
+                 leaderboard={} hall_of_fame={} generation={} ascension={}",
+                this.path.display(),
+                this.population_size,
+                this.replacement,
+                this.selection,
+                this.num_parents,
+                this.leaderboard_size,
+                this.hall_of_fame_size,
+                this.generation,
+                this.ascension,
+            );
+        }
         Ok(this)
     }
+    // Does not implement the `Default` trait, because this method is private.
     fn default() -> Self {
         let selection = "percentile=0.80".to_string();
         Self {
@@ -346,7 +362,6 @@ impl Evolution {
         self.waiting = Individual::load_dir(self.get_waiting_path())?;
         self.leaderboard = Individual::load_dir(self.get_leaderboard_path())?;
         self.leaderboard.sort_unstable_by(compare_scores);
-        // todo!();
         Ok(())
     }
 }
@@ -360,7 +375,10 @@ impl Replacement {
             "growth" => Replacement::Growth,
             "frozen" => Replacement::Frozen,
             arg0 => {
-                panic!("Expected one of ..., found {}", arg0)
+                panic!(
+                    "Expected one of generation, worst, oldest, random, growth, frozen; found {}",
+                    arg0
+                )
             }
         }
     }
@@ -368,7 +386,8 @@ impl Replacement {
 
 // Utility functions dealing with scores
 fn score_fn(metadata: &Metadata) -> (f64, u64) {
-    let score = metadata.score.unwrap_or(f64::NEG_INFINITY);
+    // Treat NaN like a missing score, otherwise `total_cmp` would rank it best.
+    let score = metadata.score.filter(|s| !s.is_nan()).unwrap_or(f64::NEG_INFINITY);
     let ascension = metadata.ascension.unwrap_or(u64::MAX);
     (score, ascension)
 }
@@ -379,6 +398,31 @@ fn compare_scores(a: &Metadata, b: &Metadata) -> std::cmp::Ordering {
         .total_cmp(&b_score)
         .reverse()
         .then_with(|| a_ascension.cmp(&b_ascension))
+}
+
+/// Make a second copy of an individual's directory.
+///
+/// The four data files are hard-linked when possible, which is instant and uses
+/// no extra disk space, and are copied otherwise (for example across file
+/// systems). Hard links are safe here because individuals are never modified in
+/// place and `Individual::delete` unlinks each file separately, so deleting one
+/// copy leaves the other intact.
+fn copy_individual(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir(dst)?;
+    let result = (|| {
+        for file in ["metadata.json", "genome", "epigenome", "phenome"] {
+            let (from, to) = (src.join(file), dst.join(file));
+            if fs::hard_link(&from, &to).is_err() {
+                fs::copy(&from, &to)?;
+            }
+        }
+        Ok(())
+    })();
+    // Remove partial copy on error.
+    if result.is_err() {
+        let _ = fs::remove_dir_all(dst);
+    }
+    result
 }
 
 /// Primary API methods: spawn & death
@@ -395,11 +439,28 @@ impl Evolution {
                 _ => 1,
             };
             let scores: Vec<f64> = self.population.iter().map(|i| score_fn(i).0).collect();
-            let index = self.selection_fn.pairs(buffer_size, scores).unwrap();
+            let index: Vec<Vec<usize>> = match self.num_parents {
+                0 => vec![vec![]; buffer_size],
+                1 => {
+                    let parents = self.selection_fn.select(buffer_size, scores).unwrap();
+                    parents.into_iter().map(|index| vec![index]).collect()
+                }
+                2 => {
+                    let pairs = self.selection_fn.pairs(buffer_size, scores).unwrap();
+                    pairs.into_iter().map(|pair| pair.to_vec()).collect()
+                }
+                _ => {
+                    let total = buffer_size.checked_mul(self.num_parents).expect("too many parents");
+                    let flat = self.selection_fn.select(total, scores).unwrap();
+                    flat.chunks_exact(self.num_parents)
+                        .map(|group| group.to_vec())
+                        .collect()
+                }
+            };
             self.buffer.reserve(index.len());
-            for pair in index {
+            for group in index {
                 self.buffer
-                    .push(pair.iter().map(|&idx| self.population[idx].name.clone()).collect());
+                    .push(group.iter().map(|&idx| self.population[idx].name.clone()).collect());
             }
         }
         // Load the parents
@@ -475,6 +536,7 @@ impl Evolution {
         // Always save to waiting directory for bookkeeping
         individual.save(&self.get_waiting_path()).unwrap();
         self.waiting.push(metadata.clone());
+        // Rollover immediately, don't be lazy or wait until the next spawn.
         if self.waiting.len() >= self.population_size {
             self.rollover().unwrap();
         }
@@ -499,6 +561,13 @@ impl Evolution {
             self.rollover_leaderboard()?;
             self.rollover_hall_of_fame()?;
             self.rollover_generation()?;
+            if self.verbose {
+                let best = self.leaderboard.first().and_then(|m| m.score);
+                eprintln!(
+                    "npc-evo: rollover to generation {} ({} individuals died, high score {:?})",
+                    self.generation, self.ascension, best,
+                );
+            }
         }
         self.save()?;
         Ok(())
@@ -507,30 +576,30 @@ impl Evolution {
         if self.leaderboard_size == 0 {
             return Ok(());
         }
-        /*
+        // Individuals must beat the current last place to be considered.
         let min_score = if self.leaderboard.len() >= self.leaderboard_size {
-            let individual = self.leaderboard.last().unwrap();
-            (*self.score)(&individual.lock().unwrap())
+            score_fn(self.leaderboard.last().unwrap()).0
         } else {
             f64::NEG_INFINITY
         };
-        // Sort together the existing leaderboard and the new contenders.
-        self.leaderboard.extend(
-            self.waiting
-                .iter()
-                .filter(|individual| (*self.score)(&individual.lock().unwrap()) > min_score)
-                .cloned(),
-        );
-        // Use stable sort to preserve ascension ordering.
-        self.leaderboard
-            .sort_by(compare_scores(self.score.as_ref()));
+        let waiting_path = self.get_waiting_path();
+        let leaderboard_path = self.get_leaderboard_path();
+        // Copy the new contenders into the leaderboard directory.
+        for contender in self.waiting.iter().filter(|m| score_fn(m).0 > min_score) {
+            copy_individual(
+                &waiting_path.join(&contender.name),
+                &leaderboard_path.join(&contender.name),
+            )?;
+            self.leaderboard.push(contender.clone());
+        }
+        // Use stable sort to preserve ascension ordering between equal scores.
+        self.leaderboard.sort_by(compare_scores);
         // Remove low performing individuals from the leaderboard directory.
         if self.leaderboard.len() > self.leaderboard_size {
-            for individual in self.leaderboard.drain(self.leaderboard_size..) {
-                individual.delete()?;
+            for loser in self.leaderboard.drain(self.leaderboard_size..) {
+                loser.delete(&leaderboard_path)?;
             }
         }
-        */
         Ok(())
     }
     fn rollover_hall_of_fame(&mut self) -> Result<(), Error> {
@@ -538,15 +607,15 @@ impl Evolution {
             return Ok(());
         }
         // Find the highest scoring individuals in the new generation.
-        let n = self.hall_of_fame_size.min(self.waiting.len() - 1);
-        self.waiting.select_nth_unstable_by(n, compare_scores);
-        let winners = &self.waiting[..n];
+        self.waiting.sort_by(compare_scores);
+        let n = self.hall_of_fame_size.min(self.waiting.len());
         // Copy the winners into the hall of fame directory
+        let waiting_path = self.get_waiting_path();
         let hall_of_fame_path = self.get_hall_of_fame_path();
-        for individual in winners.iter() {
-            // let new_path = hall_of_fame_path.join(individual.file_name());
-            // std::fs::copy(individual.path.as_ref().unwrap(), new_path)?;
-            todo!();
+        for winner in &self.waiting[..n] {
+            if score_fn(winner).0 > f64::NEG_INFINITY {
+                copy_individual(&waiting_path.join(&winner.name), &hall_of_fame_path.join(&winner.name))?;
+            }
         }
         Ok(())
     }
@@ -562,19 +631,211 @@ impl Evolution {
             let waiting_path = self.get_waiting_path();
             for individual in &self.waiting {
                 let name = &individual.name;
-                fs::rename(
-                    waiting_path.join(name),
-                    population_path.join(name),
-                )?;
+                fs::rename(waiting_path.join(name), population_path.join(name))?;
             }
             // Move the waiting list into the population
             self.population = std::mem::take(&mut self.waiting);
         } else {
             // Clear the waiting list
+            let waiting_path = self.get_waiting_path();
             for individual in self.waiting.drain(..) {
-                // individual.delete(self.get_waiting_path())?;
+                individual.delete(&waiting_path)?;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Unique scratch directory which is removed on drop.
+    struct TempDir(PathBuf);
+    impl TempDir {
+        fn new() -> Self {
+            Self(Evolution::mktempdir())
+        }
+        fn path(&self) -> String {
+            self.0.to_str().unwrap().to_string()
+        }
+    }
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn evo(dir: &TempDir, flags: &[&str]) -> Evolution {
+        let mut args = vec!["npc-evo".to_string(), dir.path()];
+        args.extend(flags.iter().map(|s| s.to_string()));
+        Evolution::new(args).unwrap()
+    }
+
+    /// Kill a new individual with the given score, returns its name.
+    fn die(evo: &mut Evolution, score: Option<f64>) -> String {
+        let mut individual = Individual::new();
+        individual.metadata.as_mut().unwrap().score = score;
+        individual.genome = Some(vec![1, 2, 3]);
+        let name = individual.metadata().name.clone();
+        evo.death(DeathRequest {
+            individual: Some(individual),
+        });
+        name
+    }
+
+    fn dir_names(path: &Path) -> BTreeSet<String> {
+        fs::read_dir(path)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect()
+    }
+
+    fn board_names(evo: &Evolution) -> Vec<String> {
+        evo.leaderboard.iter().map(|m| m.name.clone()).collect()
+    }
+
+    #[test]
+    fn leaderboard_keeps_best_across_generations() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "4", "-l", "3"]);
+        // Generation 1
+        let a = die(&mut evo, Some(1.0));
+        let b = die(&mut evo, Some(5.0));
+        let c = die(&mut evo, Some(3.0));
+        let _d = die(&mut evo, Some(0.5));
+        assert_eq!(board_names(&evo), [b.clone(), c.clone(), a.clone()]);
+        // Generation 2 displaces the two lowest
+        let e = die(&mut evo, Some(4.0));
+        let f = die(&mut evo, Some(9.0));
+        let _g = die(&mut evo, Some(0.1));
+        let _h = die(&mut evo, Some(2.0));
+        assert_eq!(board_names(&evo), [f, b, e]);
+        // Directory contents agree with the in-memory leaderboard
+        let on_disk = dir_names(&evo.get_leaderboard_path());
+        assert_eq!(on_disk, board_names(&evo).into_iter().collect());
+        // The evicted individuals are fully gone, the survivors are loadable
+        for name in &on_disk {
+            Individual::load(evo.get_leaderboard_path().join(name)).unwrap();
+        }
+    }
+
+    #[test]
+    fn leaderboard_ties_favor_incumbents_and_unscored_excluded() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "3", "-l", "2"]);
+        let first = die(&mut evo, Some(7.0));
+        let second = die(&mut evo, Some(7.0));
+        let _none = die(&mut evo, None);
+        assert_eq!(board_names(&evo), [first.clone(), second.clone()]);
+        // A tie with last place does not displace it, NaN is not a score
+        die(&mut evo, Some(7.0));
+        die(&mut evo, Some(f64::NAN));
+        die(&mut evo, None);
+        assert_eq!(board_names(&evo), [first, second]);
+    }
+
+    #[test]
+    fn leaderboard_survives_restart() {
+        let dir = TempDir::new();
+        let expected = {
+            let mut evo = evo(&dir, &["-p", "3", "-l", "2"]);
+            die(&mut evo, Some(1.0));
+            die(&mut evo, Some(2.0));
+            die(&mut evo, Some(3.0));
+            board_names(&evo)
+        };
+        let mut evo = evo(&dir, &[]);
+        assert_eq!(board_names(&evo), expected);
+        // New generation still merges with the loaded leaderboard
+        die(&mut evo, Some(10.0));
+        die(&mut evo, Some(0.0));
+        die(&mut evo, Some(0.0));
+        assert_eq!(evo.leaderboard[0].score, Some(10.0));
+        assert_eq!(evo.leaderboard[1].score, Some(3.0));
+        assert_eq!(evo.leaderboard.len(), 2);
+    }
+
+    #[test]
+    fn leaderboard_disabled_when_size_zero() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "2", "-l", "0"]);
+        die(&mut evo, Some(1.0));
+        die(&mut evo, Some(2.0));
+        assert!(evo.leaderboard.is_empty());
+        assert!(dir_names(&evo.get_leaderboard_path()).is_empty());
+    }
+
+    #[test]
+    fn hall_of_fame_collects_best_of_each_generation() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "3", "-f", "2"]);
+        let a = die(&mut evo, Some(1.0));
+        let b = die(&mut evo, Some(2.0));
+        let _c = die(&mut evo, None);
+        let hall = evo.get_hall_of_fame_path();
+        assert_eq!(dir_names(&hall), [a.clone(), b.clone()].into_iter().collect());
+        let d = die(&mut evo, Some(0.1));
+        let e = die(&mut evo, Some(0.2));
+        let f = die(&mut evo, Some(0.3));
+        let _ = d;
+        assert_eq!(dir_names(&hall), [a, b, e, f].into_iter().collect());
+    }
+
+    #[test]
+    fn hall_of_fame_cohort_of_one_and_forced_rollover() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "10", "-f", "5"]);
+        let only = die(&mut evo, Some(1.0));
+        evo.rollover().unwrap();
+        assert_eq!(dir_names(&evo.get_hall_of_fame_path()), [only].into_iter().collect());
+    }
+
+    #[test]
+    fn generation_replacement_still_swaps_population() {
+        let dir = TempDir::new();
+        let mut evo = evo(&dir, &["-p", "2", "-l", "1", "-f", "1"]);
+        let a = die(&mut evo, Some(1.0));
+        let b = die(&mut evo, Some(2.0));
+        assert_eq!(dir_names(&evo.get_population_path()), [a, b].into_iter().collect());
+        assert!(dir_names(&evo.get_waiting_path()).is_empty());
+        let c = die(&mut evo, Some(3.0));
+        let d = die(&mut evo, Some(4.0));
+        assert_eq!(dir_names(&evo.get_population_path()), [c, d].into_iter().collect());
+        assert_eq!(evo.get_generation(), 2);
+    }
+
+    #[test]
+    fn steady_state_clears_waiting_directory() {
+        for mode in ["random", "worst", "oldest", "growth", "frozen"] {
+            let dir = TempDir::new();
+            let mut evo = evo(&dir, &["-p", "3", "-r", mode, "-l", "2"]);
+            for i in 0..7 {
+                die(&mut evo, Some(i as f64));
+            }
+            // 7 deaths: two rollovers, one individual still waiting
+            assert_eq!(evo.waiting.len(), 1, "{mode}");
+            assert_eq!(dir_names(&evo.get_waiting_path()).len(), 1, "{mode}");
+            assert_eq!(evo.leaderboard.len(), 2, "{mode}");
+        }
+    }
+
+    #[test]
+    fn parents_option_controls_group_size() {
+        for parents in [0usize, 1, 2, 3, 5] {
+            let dir = TempDir::new();
+            let flags = ["-p", "4", "--parents", &parents.to_string()].map(String::from);
+            let flags: Vec<&str> = flags.iter().map(String::as_str).collect();
+            let mut evo = evo(&dir, &flags);
+            assert_eq!(evo.get_parents(), parents);
+            for i in 0..4 {
+                die(&mut evo, Some(i as f64 + 1.0));
+            }
+            // More spawns than one buffer refill, to exercise refilling
+            for _ in 0..10 {
+                assert_eq!(evo.spawn().len(), parents);
+            }
+        }
     }
 }
