@@ -9,9 +9,9 @@ all of its subprocesses are shut down before returning.
 
 Requires a POSIX system, and ``npc-server.py`` and ``npc-evo`` on the PATH.
 
-Usage: test_monoploid_binary.py [--n N] [--k K] [--seed SEED]
+Usage: test_nk.py [--n N] [--k K] [--seed SEED]
                                 [--score-limit SCORE] [--death-limit COUNT]
-       pytest test_monoploid_binary.py
+       pytest test_nk.py
 """
 
 import argparse
