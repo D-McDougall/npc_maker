@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 //! The NPC Maker is a toolkit for building and interacting with simulated
 //! environments populated by AI agents. It facilitates rapid development by
 //! providing software interfaces that separate the components of an
@@ -5,7 +7,6 @@
 //! ready-to-use tools and environments.
 
 pub mod ctrl;
-pub mod env;
 pub mod individual;
 
 pub mod evolution {

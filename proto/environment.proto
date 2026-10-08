@@ -19,7 +19,7 @@ service Environment {
   /*
   Request a new individual by mating individuals together. This requires at
   least one parent. This accepts more than two parents. All parents must be
-  alive, in this environment, and having the same body_type
+  alive, in this environment, and having the same body_type.
   */
   rpc Mate(MateRequest) returns (individual.Individual);
 
@@ -47,7 +47,9 @@ service Environment {
 
 message SpawnRequest {
   /*
-  Corresponds to an organism name in the experiment specification
+  Corresponds to an organism name in the experiment specification.
+
+  Optional if the environment contains only one body type.
   */
   string body_type = 1;
 }
@@ -64,9 +66,11 @@ Update the reproductive fitness of a living individual.
 */
 message ScoreRequest {
   /*
-  Individual's name. The Individual must be alive and in this instance of the
+  Individual's name. The individual must be alive and in this instance of the
   environment, meaning that its final score must be reported _before_ the death
-  is called on the Individual.
+  is called on the individual.
+
+  Optional if the environment contains only one individual.
   */
   string name = 1;
 
@@ -84,8 +88,10 @@ accumulates over the course of its lifetime.
 */
 message TelemetryRequest {
   /*
-  Individual's name. Individual must be alive and in this instance of the
+  Individual's name. The individual must be alive and in this instance of the
   environment.
+
+  Optional if the environment contains only one individual.
   */
   string name = 1;
 
@@ -117,6 +123,8 @@ the environment.
 message DeathRequest {
   /*
   Name of the deceased Individual.
+
+  Optional if the environment contains only one individual.
   */
   string name = 1;
 }
