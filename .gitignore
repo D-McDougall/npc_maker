@@ -9,3 +9,4 @@ venv
 
 # Rust
 target
+Cargo.lock

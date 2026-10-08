@@ -554,16 +554,18 @@ impl Evolution {
         self.generation += 1;
         if matches!(self.replacement, Replacement::Generation) {
             // Discard the current generation
+            let population_path = self.get_population_path();
             for individual in self.population.drain(..) {
-                // individual.delete(self.get_population_path())?;
+                individual.delete(&population_path)?;
             }
             // Move the waiting list files into the population directory
-            let population_path = self.get_population_path();
-            for individual in &mut self.waiting {
-                // let old_path = individual.path.as_ref().unwrap();
-                // let new_path = population_path.join(individual.file_name());
-                // std::fs::rename(&old_path, &new_path)?;
-                // individual.path = Some(new_path); // Update the Individual's bookkeeping
+            let waiting_path = self.get_waiting_path();
+            for individual in &self.waiting {
+                let name = &individual.name;
+                fs::rename(
+                    waiting_path.join(name),
+                    population_path.join(name),
+                )?;
             }
             // Move the waiting list into the population
             self.population = std::mem::take(&mut self.waiting);

@@ -1,3 +1,4 @@
 protobuf
+grpcio
 grpcio-tools
 mate_selection==0.3.0

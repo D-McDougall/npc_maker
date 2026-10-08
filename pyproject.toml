@@ -22,6 +22,7 @@
     ]
     dependencies = [
         "protobuf",
+        "grpcio",
         "grpcio-tools",
         "mate_selection",
     ]

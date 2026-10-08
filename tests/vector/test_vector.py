@@ -49,6 +49,7 @@ SEED             = 0x5EED
 BODY_TYPE        = "vector"
 SCORE_LIMIT      = 0.99     # Success if the maximum score rises above this.
 DEATH_LIMIT      = 10_000   # Failure if the number of dead rises above this.
+EVOLUTION        = "npc-evo -p 200 -s ranked-linear=1".split()
 TIMEOUT          = 300.0    # Failure if the experiment takes longer (seconds).
 POLL_INTERVAL    = 0.5      # Time between diagnostic polls (seconds).
 STARTUP_TIMEOUT  = 60.0     # Time allowed for the server to start (seconds).
@@ -61,7 +62,7 @@ def _free_port():
         return sock.getsockname()[1]
 
 
-def _make_config(dimension, seed):
+def _make_config(dimension, seed, evolution):
     here = Path(__file__).parent
     return {
         "name": "vector test",
@@ -80,8 +81,7 @@ def _make_config(dimension, seed):
                     str(here / "vector_genetics.py"),
                     str(dimension),
                 ],
-                # Evolution is intentionally omitted. The NPC server will
-                # request founder individuals from the genetics service.
+                "evolution": evolution,
             }
         ],
     }
@@ -215,7 +215,8 @@ def _shutdown(server):
 
 
 def run_vector(dimension=DIMENSION, seed=SEED,
-               score_limit=SCORE_LIMIT, death_limit=DEATH_LIMIT):
+               score_limit=SCORE_LIMIT, death_limit=DEATH_LIMIT,
+               evolution=EVOLUTION):
     """
     Run the experiment. Returns a (success, message) pair.
 
@@ -225,12 +226,13 @@ def run_vector(dimension=DIMENSION, seed=SEED,
       score_limit: The experiment succeeds if the maximum score rises above this.
       death_limit: The experiment fails if the number of dead individuals rises
                    above this.
+      evolution: Evolution service command.
     """
     with tempfile.TemporaryDirectory(prefix="npc-vector-") as directory:
         directory = Path(directory)
         config_file = directory / "experiment.json"
         config_file.write_text(
-            json.dumps(_make_config(dimension, seed), indent=2),
+            json.dumps(_make_config(dimension, seed, evolution), indent=2),
             encoding="utf-8",
         )
 
@@ -269,7 +271,7 @@ def run_vector(dimension=DIMENSION, seed=SEED,
 
 
 def test_vector():
-    success, message = run_vector(DIMENSION, SEED, SCORE_LIMIT, DEATH_LIMIT)
+    success, message = run_vector(DIMENSION, SEED, SCORE_LIMIT, DEATH_LIMIT, EVOLUTION)
     assert success, message
 
 
@@ -294,7 +296,7 @@ def main():
         parser.error("death limit must not be negative")
 
     success, message = run_vector(
-        args.dimension, args.seed, args.score_limit, args.death_limit)
+        args.dimension, args.seed, args.score_limit, args.death_limit, EVOLUTION)
     print(f"{'SUCCESS' if success else 'FAILURE'}: {message}")
     return 0 if success else 1
 
