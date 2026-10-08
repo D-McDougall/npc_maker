@@ -6,6 +6,7 @@ use npc_maker::individual::{Individual, Metadata};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tonic::Status;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -16,9 +17,9 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const HELP: &'static str = r#"Evolutionary algorithms for the NPC Maker
+pub const HELP: &str = r#"Evolutionary algorithms for the NPC Maker
 
 USAGE: npc-evo [PATH] [OPTIONS]
 
@@ -478,16 +479,23 @@ impl Evolution {
         parents
     }
     /// Add a new individual to this population
-    pub fn death(&mut self, request: DeathRequest) {
+    pub fn death(&mut self, request: DeathRequest) -> Result<(), Status> {
         // Bookkeeping on the Individual
-        let mut individual = request.individual.unwrap();
+        let Some(mut individual) = request.individual else {
+            return Err(Status::invalid_argument("missing metadata"));
+        };
         {
             let metadata = individual.metadata.as_mut().unwrap();
-            assert!(metadata.ascension.is_none());
+            if metadata.ascension.is_some() {
+                return Err(Status::invalid_argument("already dead"));
+            }
             metadata.ascension = Some(self.ascension);
             self.ascension += 1;
         }
         let metadata = individual.metadata.as_ref().unwrap(); // Reborrow as immutable
+        if metadata.name.is_empty() {
+            return Err(Status::invalid_argument("missing name"));
+        }
         // Steady-state replacement: put individual directly into the population
         match self.replacement {
             Replacement::Frozen => {
@@ -516,7 +524,7 @@ impl Evolution {
                         .population
                         .iter()
                         .enumerate()
-                        .min_by(|a, b| a.1.score.unwrap().total_cmp(&b.1.score.unwrap()))
+                        .min_by(|a, b| compare_scores(a.1, b.1))
                         .unwrap();
                     let worst_individual = self.population.swap_remove(worst_index);
                     worst_individual.delete(self.get_population_path()).unwrap();
@@ -540,12 +548,13 @@ impl Evolution {
             }
         }
         // Always save to waiting directory for bookkeeping
-        individual.save(&self.get_waiting_path()).unwrap();
+        individual.save(&self.get_waiting_path())?;
         self.waiting.push(metadata.clone());
         // Rollover immediately, don't be lazy or wait until the next spawn.
         if self.waiting.len() >= self.population_size {
             self.rollover().unwrap();
         }
+        Ok(())
     }
 }
 
@@ -687,7 +696,8 @@ mod tests {
         let name = individual.metadata().name.clone();
         evo.death(DeathRequest {
             individual: Some(individual),
-        });
+        })
+        .unwrap();
         name
     }
 
@@ -835,12 +845,8 @@ mod tests {
             die(&mut evo, None);
             die(&mut evo, Some(1.0));
 
-            // An unscored member is ranked as the worst by score_fn and should be
-            // replaceable without panicking when the next individual arrives.
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                die(&mut evo, Some(2.0));
-            }));
-            assert!(result.is_ok(), "replacement {mode} panicked on a missing score");
+            eprintln!("Testing replacement {mode} with missing score");
+            die(&mut evo, Some(2.0));
         }
     }
 

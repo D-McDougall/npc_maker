@@ -25,7 +25,7 @@ impl npc_maker::evolution::evolution_server::Evolution for EvolutionServerImpl {
         Ok(Response::new(SpawnResponse { parents }))
     }
     async fn death(&self, request: Request<DeathRequest>) -> TonicResult<DeathResponse> {
-        self.0.lock().unwrap().death(request.into_inner());
+        self.0.lock().unwrap().death(request.into_inner())?;
         Ok(Response::new(DeathResponse {}))
     }
 }
@@ -116,7 +116,7 @@ impl ServerOptions {
         }
         // Prepare the listen option
         if this.listen.is_none() {
-            let host = this.host.as_ref().map(String::as_str).unwrap_or("127.0.0.1");
+            let host = this.host.as_deref().unwrap_or("127.0.0.1");
             let port = this.port.unwrap_or(47001);
             this.listen = Some(format!("{}:{}", host, port));
         }
@@ -139,4 +139,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use npc_maker::individual::{Individual, Metadata};
+
+    #[tokio::test]
+    async fn death_handles_broken_requests_without_panicking() {
+        let broken_requests = vec![
+            ("missing individual", DeathRequest { individual: None }),
+            (
+                "missing name",
+                DeathRequest {
+                    individual: Some(Individual {
+                        metadata: Some(Default::default()),
+                        ..Default::default()
+                    }),
+                },
+            ),
+            (
+                "evil name",
+                DeathRequest {
+                    individual: Some(Individual {
+                        metadata: Some(Metadata {
+                            name: "foo/../../bar".to_string(),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                },
+            ),
+            (
+                "ascension set",
+                DeathRequest {
+                    individual: Some(Individual {
+                        metadata: Some(Metadata {
+                            name: "1234".to_string(),
+                            generation: Some(0),
+                            ascension: Some(7),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                },
+            ),
+            (
+                "missing genome",
+                DeathRequest {
+                    individual: Some(Individual::new()),
+                },
+            ),
+        ];
+
+        for (description, request) in broken_requests {
+            // Isolate each request so one panic cannot poison the service mutex
+            // and obscure whether later malformed requests are handled safely.
+            let service = EvolutionServerImpl(Mutex::new(npc_evo::Evolution::new(vec!["npc-evo".into()]).unwrap()));
+            let task = tokio::spawn(async move {
+                npc_maker::evolution::evolution_server::Evolution::death(&service, Request::new(request)).await
+            });
+            assert!(task.await.is_ok(), "Death panicked for {description}");
+        }
+    }
 }

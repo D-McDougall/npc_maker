@@ -1,6 +1,6 @@
 //! Data structure and persistence for an individual life-form.
 
-use std::io::{Result, Write};
+use std::io::Result;
 use std::path::Path;
 use std::{fs, fs::File};
 
@@ -111,10 +111,10 @@ impl Individual {
     }
 
     pub fn score(&self) -> Option<f64> {
-        self.metadata().score.clone()
+        self.metadata().score
     }
     pub fn ascension(&self) -> Option<u64> {
-        self.metadata().ascension.clone()
+        self.metadata().ascension
     }
 
     /// Save an individual to file.
@@ -153,7 +153,7 @@ impl Individual {
 
         // Make the directory in case this is the first individual to be saved to it.
         if !path.exists() {
-            std::fs::create_dir(&path)?;
+            std::fs::create_dir(path)?;
         }
 
         // Make directory with this individual's name
