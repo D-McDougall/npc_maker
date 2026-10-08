@@ -828,6 +828,23 @@ mod tests {
     }
 
     #[test]
+    fn replacement_accepts_unscored_individuals() {
+        for mode in ["random", "worst", "oldest", "growth", "frozen"] {
+            let dir = TempDir::new();
+            let mut evo = evo(&dir, &["-p", "2", "-r", mode]);
+            die(&mut evo, None);
+            die(&mut evo, Some(1.0));
+
+            // An unscored member is ranked as the worst by score_fn and should be
+            // replaceable without panicking when the next individual arrives.
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                die(&mut evo, Some(2.0));
+            }));
+            assert!(result.is_ok(), "replacement {mode} panicked on a missing score");
+        }
+    }
+
+    #[test]
     fn parents_option_controls_group_size() {
         for parents in [0usize, 1, 2, 3, 5] {
             let dir = TempDir::new();
