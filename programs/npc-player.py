@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Replay previously saved individuals through the NPC Maker's Evolution service.
 
