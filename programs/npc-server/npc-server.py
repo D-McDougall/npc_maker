@@ -47,7 +47,8 @@ class LocalProcess:
 
         self.process = subprocess.Popen(command, cwd=cwd)
 
-    def __del__(self):
+    def close(self):
+        """Stop and reap this subprocess, escalating if it does not exit."""
         if self.process.poll() is None:
             self.process.terminate()
             try:
@@ -55,6 +56,9 @@ class LocalProcess:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+
+    def __del__(self):
+        self.close()
 
 
 class ServiceProcess(LocalProcess):
@@ -76,9 +80,12 @@ class ServiceProcess(LocalProcess):
 
         self.stub = stub_class(self.channel)
 
-    def __del__(self):
+    def close(self):
         self.channel.close()
-        super().__del__()
+        super().close()
+
+    def __del__(self):
+        self.close()
 
 
 class NpcServer(environment_pb2_grpc.EnvironmentServicer):
@@ -129,6 +136,15 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                     cwd=self.save_dir / f"{body_type}-genetics")
                 self.genetics[body_type] = service.stub
                 self.processes.append(service)
+
+    def close(self):
+        """Close all child services and reap their processes."""
+        if self.environment is not None:
+            self.environment.close()
+            self.environment = None
+        for process in reversed(self.processes):
+            process.close()
+        self.processes.clear()
 
     def _body_type(self, body_type):
         if not body_type:
@@ -445,6 +461,7 @@ def main():
     finally:
         server.stop(0).wait()
         failed = program.failed
+        program.close()
         del program
 
     return 1 if failed else 0
