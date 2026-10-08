@@ -49,7 +49,7 @@ SEED             = 0x5EED
 BODY_TYPE        = "vector"
 SCORE_LIMIT      = 0.99     # Success if the maximum score rises above this.
 DEATH_LIMIT      = 10_000   # Failure if the number of dead rises above this.
-EVOLUTION        = "npc-evo -p 200 -s ranked-linear=1".split()
+EVOLUTION        = "npc-evo -p 20 -s ranked-exponential=5".split()
 TIMEOUT          = 300.0    # Failure if the experiment takes longer (seconds).
 POLL_INTERVAL    = 0.5      # Time between diagnostic polls (seconds).
 STARTUP_TIMEOUT  = 60.0     # Time allowed for the server to start (seconds).
@@ -78,7 +78,7 @@ def _make_config(dimension, seed, evolution):
                 "body_type": BODY_TYPE,
                 "genetics": [
                     sys.executable,
-                    str(here / "vector_genetics.py"),
+                    str(here / "diploid_genetics.py"),
                     str(dimension),
                 ],
                 "evolution": evolution,
