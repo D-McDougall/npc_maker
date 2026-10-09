@@ -1,4 +1,9 @@
+# Library Dependencies
 protobuf
 grpcio
 grpcio-tools
 mate_selection==0.3.0
+
+# Development Dependencies
+numpy
+matplotlib
