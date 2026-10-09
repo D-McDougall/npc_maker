@@ -22,6 +22,8 @@ The NPC Maker is split into five separate micro-service programs:
 * **Genetic Algorithms** decide how organisms reproduce their parameters.
 * **Server Programs** route communications between the other services.
 
+## [Documentation 🔗](docs/docs.md)
+
 ## Python API ##
 
 * Installation: `python -m pip install --user npc-maker`

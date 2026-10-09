@@ -6,7 +6,7 @@ PIP         := venv/bin/pip3
 PYTEST      := venv/bin/pytest
 export PATH := $(CURDIR)/venv/bin:$(PATH)
 
-.PHONY: all venv python rust-toolchain rust package install clean
+.PHONY: all venv python rust-toolchain rust docs package install clean
 
 all: package
 
@@ -32,6 +32,13 @@ python: venv
 
 rust:
 	cargo build --release
+
+docs:
+	# docker pull pseudomuto/protoc-gen-doc # Use this command to get the docker image
+	docker run --rm \
+	  -v ${CURDIR}/docs:/out \
+	  -v ${CURDIR}/proto:/protos \
+	  pseudomuto/protoc-gen-doc --doc_opt=markdown,docs.md
 
 package: python rust
 	# Copy programs into python release
