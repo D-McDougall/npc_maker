@@ -11,6 +11,8 @@ Commands are processed sequentially, in the order received. The environment may
 send additional commands while earlier commands are still outstanding.
 Responses are correlated with requests by request_id.
 
+Servicers should accept many simultaneous sessions.
+
 A session-level failure terminates the session and kills the controller
 instance. A command-level error is returned as a response and does not,
 by itself, terminate the session.
@@ -40,6 +42,8 @@ message ControllerRequest {
 
 /*
 Initialize a new controller.
+
+This must be called exactly once at the start of every new session.
 */
 message InitializeRequest {
   /*

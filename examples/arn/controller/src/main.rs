@@ -1,89 +1,29 @@
-use ndarray::{Array1, Array2};
-use npc_maker::ctrl::API;
-use serde::Deserialize;
-use std::path::Path;
+use arn::{ArnController, Cli, parse_args};
+use npc_maker::controller::controller_server::ControllerServer;
+use std::net::SocketAddr;
+use tonic::transport::Server;
 
-#[derive(Deserialize)]
-#[allow(non_snake_case)]
-struct Phenome {
-    /// Temperature
-    T: f64,
-
-    /// Number of genes
-    N: usize,
-
-    /// Input gene names
-    I: Vec<Vec<usize>>,
-
-    /// Output gene names
-    O: Vec<Vec<usize>>,
-
-    /// Weights matrix
-    W: Vec<f64>,
-}
-
-#[derive(Default)]
-struct RegulatoryNetwork {
-    temperature: f64,
-    matrix: Array2<f64>,
-    inputs: Vec<Vec<usize>>,
-    outputs: Vec<Vec<usize>>,
-    queue: Vec<(usize, f64)>,
-    state: Array1<f64>,
-}
-
-impl RegulatoryNetwork {
-    fn num_states(&self) -> usize {
-        self.state.len()
-    }
-}
-impl API for RegulatoryNetwork {
-    fn genome(&mut self, _environment: &Path, _population: &str, value: Box<[u8]>) {
-        let Phenome { T, N, I, O, W } = serde_json::from_slice(&value).unwrap();
-        //
-        assert!(T >= 0.0);
-        self.temperature = T;
-        self.state = Array1::from_elem(N, 1.0);
-        self.inputs = I;
-        self.outputs = O;
-        self.matrix = Array2::from_shape_vec((N, N), W).unwrap();
-    }
-    fn reset(&mut self) {
-        self.queue.clear();
-        self.state.fill(1.0);
-    }
-    fn set_input(&mut self, gin: u64, value: String) {
-        let value: f64 = value.parse().unwrap();
-        self.queue.push((gin as usize, value));
-    }
-    fn get_output(&mut self, gin: u64) -> String {
-        let indices = &self.outputs[gin as usize];
-        if indices.is_empty() {
-            return 0.to_string();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().collect();
+    let listen = match parse_args(&args) {
+        Ok(Cli::Serve(listen)) => listen,
+        Ok(Cli::Print(text)) => {
+            println!("{text}");
+            return Ok(());
         }
-        let value = indices
-            .iter()
-            .map(|gene_index| self.state[*gene_index])
-            .sum::<f64>()
-            / indices.len() as f64;
-        format!("{value}")
-    }
-    fn advance(&mut self, dt: f64) {
-        let mut input_delta = Array1::<f64>::zeros(self.num_states());
-        for (index, value) in self.queue.drain(..) {
-            for gene_index in &self.inputs[index] {
-                input_delta[*gene_index] += dt * self.temperature * value
-            }
+        Err(message) => {
+            eprintln!("Error: {message}");
+            std::process::exit(2);
         }
-        let state_delta = dt * self.temperature * &self.state * self.matrix.dot(&self.state);
-        self.state = &self.state + state_delta + input_delta;
-        for x in &mut self.state {
-            *x = x.max(0.0);
-        }
-        self.state *= self.num_states() as f64 / self.state.sum();
-    }
-}
-
-fn main() {
-    RegulatoryNetwork::default().main().unwrap();
+    };
+    let addr: SocketAddr = listen.parse().unwrap_or_else(|error| {
+        eprintln!("Error: expected an address like 127.0.0.1:47001, found {listen}: {error}");
+        std::process::exit(3);
+    });
+    Server::builder()
+        .add_service(ControllerServer::new(ArnController))
+        .serve(addr)
+        .await?;
+    Ok(())
 }
