@@ -7,7 +7,20 @@ an artificial-life experiment and allow independently developed components to
 work together. The NPC Maker also includes a collection of ready-to-use tools
 and environments.
 
-## [Documentation 🔗](/docs/overview.md) ##
+## System Organization ##
+
+![System Organization](docs/diagrams/system_organization.svg)
+
+The NPC Maker is structured around remote procedure calls (gRPC) defined using
+the Protobuf interface description language.
+
+The NPC Maker is split into five separate micro-service programs:
+
+* **Environments** are self-contained worlds populated by AI organisms.
+* **Controllers** are the brains of the organisms.
+* **Evolutionary Algorithms** decide which organisms to reproduce.
+* **Genetic Algorithms** decide how organisms reproduce their parameters.
+* **Server Programs** route communications between the other services.
 
 ## Python API ##
 
