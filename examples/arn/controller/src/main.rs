@@ -5,7 +5,7 @@ use std::path::Path;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
-struct Genome {
+struct Phenome {
     /// Temperature
     T: f64,
 
@@ -39,7 +39,7 @@ impl RegulatoryNetwork {
 }
 impl API for RegulatoryNetwork {
     fn genome(&mut self, _environment: &Path, _population: &str, value: Box<[u8]>) {
-        let Genome { T, N, I, O, W } = serde_json::from_slice(&value).unwrap();
+        let Phenome { T, N, I, O, W } = serde_json::from_slice(&value).unwrap();
         //
         assert!(T >= 0.0);
         self.temperature = T;

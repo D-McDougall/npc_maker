@@ -3,9 +3,9 @@
 This implements the controller interface for artificial regulatory networks.
 
 
-## Genome Format
+## Phenome Format
 
-The genome is UTF-8 encoded. It is a single JSON Object, with the following
+The phenome is UTF-8 encoded. It is a single JSON Object, with the following
 attributes:
 
 | Attribute | JSON Type | Description |
