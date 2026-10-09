@@ -7,10 +7,7 @@ genetics, then monitors the experiment through the server's Diagnostics
 service. The experiment returns the maximum score at regular intervals.
 The experiment ends when it reaches either the death-limit or the time-limit.
 
-Usage: test_nk.py [--n N] [--k K] [--seed SEED]
-                                [--score-limit SCORE] [--death-limit COUNT]
-                                [--evoultion COMMAND]
-       pytest test_nk.py
+Usage: test_nk.py [-n N] [-k K] [--seed SEED] [--death-limit COUNT] [--evolution COMMAND]
 """
 
 import argparse
@@ -170,7 +167,7 @@ def _shutdown(server):
 
 def run_nk(n=N, k=K, seed=SEED, death_limit=DEATH_LIMIT, evolution=EVOLUTION):
     """
-    Run the NK experiment and return a (success, message) pair.
+    Run the NK experiment and return a trace of pairs of (death-count, max-score).
     """
     with tempfile.TemporaryDirectory(prefix="npc-nk-") as directory:
         directory = Path(directory)
@@ -195,16 +192,13 @@ def run_nk(n=N, k=K, seed=SEED, death_limit=DEATH_LIMIT, evolution=EVOLUTION):
         try:
             started = time.monotonic()
             channel, diagnostics = _connect(address, server)
-            success, message = _monitor(diagnostics, server, started, death_limit)
+            score_report = _monitor(diagnostics, server, started, death_limit)
         finally:
             if channel is not None:
                 channel.close()
             problems = _shutdown(server)
             if problems:
                 raise RuntimeError("unclean shutdown: " + ", ".join(problems))
-
-        if not success:
-            raise ValueError(message)
 
         return score_report
 
