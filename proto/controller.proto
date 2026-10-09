@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package controller;
+
+/*
+The Controller service provides control systems to its environment.
+
+Each controller instance is represented by one bidirectional streaming session.
+The environment sends commands and receives responses over the same stream.
+Commands are processed sequentially, in the order received. The environment may
+send additional commands while earlier commands are still outstanding.
+Responses are correlated with requests by request_id.
+
+A session-level failure terminates the session and kills the controller
+instance. A command-level error is returned as a response and does not,
+by itself, terminate the session.
+*/
+service Controller {
+  rpc Session(stream ControllerRequest)
+      returns (stream ControllerResponse);
+}
+
+/*
+A command sent by the environment to the controller.
+*/
+message ControllerRequest {
+  /*
+  request_id begins at 0 and auto-increments after every request.
+  */
+  uint64 request_id = 1;
+
+  oneof command {
+    InitializeRequest initialize = 2;
+    ResetRequest reset = 3;
+    AdvanceRequest advance = 4;
+    SetInputsRequest set_inputs = 5;
+    GetOutputsRequest get_outputs = 6;
+  }
+}
+
+/*
+Initialize a new controller.
+*/
+message InitializeRequest {
+  /*
+  Genetic material for controller.
+  */
+  bytes phenome = 1;
+}
+
+/*
+Reset the controller to its initial state.
+*/
+message ResetRequest {
+}
+
+/*
+Advance the controller's internal state by `dt` seconds.
+*/
+message AdvanceRequest {
+  /*
+  Time interval, in seconds.
+  */
+  double dt = 1;
+}
+
+/*
+Deliver data from the environment to sensory input interfaces.
+*/
+message SetInputsRequest {
+  repeated IoValue inputs = 1;
+}
+
+/*
+Retrieve data from motor output interfaces.
+*/
+message GetOutputsRequest {
+  /*
+  Motor output interface IDs to retrieve.
+  */
+  repeated uint64 ids = 1;
+}
+
+/*
+Container for sensory input / motor output data.
+*/
+message IoValue {
+  /*
+  Input/output interface ID.
+
+  Sensor and motor interfaces are enumerated, separately, starting at zero.
+  */
+  uint64 id = 1;
+
+  oneof value {
+    /*
+    64 bit floating-point number.
+    */
+    double number = 2;
+
+    /*
+    UTF-8 string.
+    */
+    string text = 3;
+
+    /*
+    Arbitrary binary data.
+    */
+    bytes blob = 4;
+  }
+}
+
+/*
+Controller response with motor outputs.
+
+This is only sent in response to GetOutputsRequest messages.
+*/
+message ControllerResponse {
+
+  uint64 request_id = 1;
+
+  repeated IoValue outputs = 2;
+}

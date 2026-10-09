@@ -6,7 +6,6 @@
 //! artificial-life experiment. The NPC Maker also includes a collection of
 //! ready-to-use tools and environments.
 
-pub mod ctrl;
 pub mod individual;
 
 pub mod evolution {
@@ -17,9 +16,6 @@ pub mod genetics {
     tonic::include_proto!("genetics");
 }
 
-fn read_bytes(reader: &mut impl std::io::BufRead, len: usize) -> std::io::Result<Box<[u8]>> {
-    use std::mem::{MaybeUninit, transmute};
-    let mut data = unsafe { transmute::<Vec<MaybeUninit<u8>>, Vec<u8>>(vec![MaybeUninit::uninit(); len]) };
-    reader.read_exact(&mut data)?;
-    Ok(data.into())
+pub mod controller {
+    tonic::include_proto!("controller");
 }

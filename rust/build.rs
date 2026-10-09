@@ -29,11 +29,12 @@ fn main_inner() -> Result<(), Box<dyn std::error::Error>> {
         .compile_with_config(
             config,
             &[
+                "controller.proto",
+                "diagnostics.proto",
                 "environment.proto",
                 "evolution.proto",
                 "genetics.proto",
                 "individual.proto",
-                "diagnostics.proto",
             ],
             &[proto_dir.to_str().unwrap(), well_known_types.to_str().unwrap()],
         )?;
