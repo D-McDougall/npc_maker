@@ -16,13 +16,21 @@ const EPSILON: f64 = 1e-12;
 /// Two uncoupled genes. Gene 0 is the input, genes 0 & 1 are outputs 0 & 1.
 const PHENOME: &str = r#"{"T":1.0,"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#;
 
+/// The same network as `PHENOME`, but without a temperature.
+const PHENOME_NO_TEMPERATURE: &str = r#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#;
+
 /// Start a server on a free port, returns the URL.
 async fn serve() -> String {
+    serve_with(ArnController::default()).await
+}
+
+/// Start a given server on a free port, returns the URL.
+async fn serve_with(controller: ArnController) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(
         Server::builder()
-            .add_service(ControllerServer::new(ArnController))
+            .add_service(ControllerServer::new(controller))
             .serve_with_incoming(TcpListenerStream::new(listener)),
     );
     format!("http://{address}")
@@ -172,6 +180,59 @@ async fn command_before_initialize_ends_the_session() {
     client.advance(1.0).await;
     let status = client.responses.message().await.unwrap_err();
     assert_eq!(status.code(), Code::FailedPrecondition);
+}
+
+#[tokio::test]
+async fn initializing_twice_ends_the_session() {
+    let url = serve().await;
+    let mut client = Client::connect(&url).await;
+    client.initialize(PHENOME).await;
+    client.initialize(PHENOME).await;
+    let status = client.responses.message().await.unwrap_err();
+    assert_eq!(status.code(), Code::FailedPrecondition);
+}
+
+#[tokio::test]
+async fn initializing_twice_does_not_disturb_other_sessions() {
+    let url = serve().await;
+    let mut good = Client::connect(&url).await;
+    let mut bad = Client::connect(&url).await;
+    good.initialize(PHENOME).await;
+    bad.initialize(PHENOME).await;
+    bad.initialize(PHENOME).await;
+    let status = bad.responses.message().await.unwrap_err();
+    assert_eq!(status.code(), Code::FailedPrecondition);
+    // A session which initialized only once carries on as normal.
+    good.set_input(0, 1.0).await;
+    good.advance(1.0).await;
+    assert_close(&good.outputs(vec![0, 1]).await.1, &[4.0 / 3.0, 2.0 / 3.0]);
+}
+
+#[tokio::test]
+async fn server_temperature_applies_to_phenomes_without_one() {
+    // With T = 2, gene 0 is 1+2 = 3 and gene 1 is 1, renormalized by 2/4.
+    let url = serve_with(ArnController::new(2.0)).await;
+    let mut hot = Client::connect(&url).await;
+    hot.initialize(PHENOME_NO_TEMPERATURE).await;
+    hot.set_input(0, 1.0).await;
+    hot.advance(1.0).await;
+    assert_close(&hot.outputs(vec![0, 1]).await.1, &[1.5, 0.5]);
+    // The phenome's own temperature takes precedence, on the same server.
+    let mut explicit = Client::connect(&url).await;
+    explicit.initialize(PHENOME).await;
+    explicit.set_input(0, 1.0).await;
+    explicit.advance(1.0).await;
+    assert_close(&explicit.outputs(vec![0, 1]).await.1, &[4.0 / 3.0, 2.0 / 3.0]);
+}
+
+#[tokio::test]
+async fn default_server_temperature_is_one() {
+    let url = serve().await;
+    let mut client = Client::connect(&url).await;
+    client.initialize(PHENOME_NO_TEMPERATURE).await;
+    client.set_input(0, 1.0).await;
+    client.advance(1.0).await;
+    assert_close(&client.outputs(vec![0, 1]).await.1, &[4.0 / 3.0, 2.0 / 3.0]);
 }
 
 #[tokio::test]

@@ -19,6 +19,9 @@ use tonic::{Request, Response, Status, Streaming};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Temperature to use when neither the phenome nor the command line gives one.
+pub const DEFAULT_TEMPERATURE: f64 = 1.0;
+
 pub const HELP: &str = r#"Artificial regulatory network control system for the NPC Maker
 
 USAGE: arn [OPTIONS]
@@ -27,6 +30,10 @@ SERVER OPTIONS:
     --listen <ADDRESS:PORT>       Bind to IP address and port (default 127.0.0.1:47001)
     --host <ADDRESS>              Bind to IP address
     --port <PORT>                 Bind to port number
+
+NETWORK OPTIONS:
+    --temperature <T>             Temperature for phenomes which do not specify
+                                  one, a non-negative number (default 1.0)
 
 GENERAL OPTIONS:
         --version                 Print version information
@@ -37,8 +44,8 @@ GENERAL OPTIONS:
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct Phenome {
-    /// Temperature
-    T: f64,
+    /// Temperature, optional. If missing then the default temperature is used.
+    T: Option<f64>,
 
     /// Number of genes
     N: usize,
@@ -66,12 +73,22 @@ pub struct RegulatoryNetwork {
 
 impl RegulatoryNetwork {
     /// Build a network from a UTF-8 JSON phenome.
-    pub fn from_phenome(phenome: &[u8]) -> Result<Self, Status> {
-        let Phenome { T, N, I, O, W } = serde_json::from_slice(phenome)
+    ///
+    /// The temperature comes from the phenome if it specifies one, which takes
+    /// precedence, and otherwise it is `default_temperature`.
+    pub fn from_phenome(phenome: &[u8], default_temperature: f64) -> Result<Self, Status> {
+        let Phenome {
+            T: temperature,
+            N,
+            I,
+            O,
+            W,
+        } = serde_json::from_slice(phenome)
             .map_err(|error| Status::invalid_argument(format!("invalid phenome: {error}")))?;
-        if !(T.is_finite() && T >= 0.0) {
+        let temperature = temperature.unwrap_or(default_temperature);
+        if !(temperature.is_finite() && temperature >= 0.0) {
             return Err(Status::invalid_argument(
-                "invalid phenome: T must be finite and non-negative",
+                "invalid temperature: T must be finite and non-negative",
             ));
         }
         if N == 0 {
@@ -97,7 +114,7 @@ impl RegulatoryNetwork {
         let matrix = Array2::from_shape_vec((N, N), W)
             .map_err(|error| Status::invalid_argument(format!("invalid phenome: {error}")))?;
         Ok(Self {
-            temperature: T,
+            temperature,
             matrix,
             inputs: I,
             outputs: O,
@@ -197,12 +214,29 @@ impl RegulatoryNetwork {
 /// The state of one controller session.
 ///
 /// This holds no I/O, so that it can be tested without a network connection.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Session {
+    /// Temperature for phenomes which do not specify one.
+    temperature: f64,
     network: Option<RegulatoryNetwork>,
 }
 
+impl Default for Session {
+    fn default() -> Self {
+        Self::new(DEFAULT_TEMPERATURE)
+    }
+}
+
 impl Session {
+    /// Start a session. The `temperature` is used if the phenome does not
+    /// specify one.
+    pub fn new(temperature: f64) -> Self {
+        Self {
+            temperature,
+            network: None,
+        }
+    }
+
     /// Process one command.
     ///
     /// Only `GetOutputs` commands produce a response. Any `Err` is a
@@ -213,8 +247,12 @@ impl Session {
             return Err(Status::invalid_argument("missing command"));
         };
         match command {
+            // A session is initialized exactly once.
+            Command::Initialize(_) if self.network.is_some() => {
+                Err(Status::failed_precondition("controller is already initialized"))
+            }
             Command::Initialize(request) => {
-                self.network = Some(RegulatoryNetwork::from_phenome(&request.phenome)?);
+                self.network = Some(RegulatoryNetwork::from_phenome(&request.phenome, self.temperature)?);
                 Ok(None)
             }
             // Resetting an uninitialized controller does nothing, by definition.
@@ -246,9 +284,26 @@ impl Session {
     }
 }
 
-/// The gRPC service. It is stateless, each session owns its own network.
-#[derive(Debug, Default)]
-pub struct ArnController;
+/// The gRPC service. Each session owns its own network, the only thing shared
+/// between sessions is the default temperature.
+#[derive(Debug)]
+pub struct ArnController {
+    temperature: f64,
+}
+
+impl ArnController {
+    /// Serve sessions, using `temperature` for every phenome which does not
+    /// specify one.
+    pub fn new(temperature: f64) -> Self {
+        Self { temperature }
+    }
+}
+
+impl Default for ArnController {
+    fn default() -> Self {
+        Self::new(DEFAULT_TEMPERATURE)
+    }
+}
 
 #[tonic::async_trait]
 impl Controller for ArnController {
@@ -260,8 +315,9 @@ impl Controller for ArnController {
     ) -> Result<Response<Self::SessionStream>, Status> {
         let mut inbound = request.into_inner();
         let (outbound, receiver) = mpsc::channel(16);
+        let temperature = self.temperature;
         tokio::spawn(async move {
-            let mut session = Session::default();
+            let mut session = Session::new(temperature);
             // Commands are processed sequentially, in the order received.
             // The loop ends when the environment closes the stream, when the
             // connection fails, or on the first session-level error.
@@ -284,25 +340,47 @@ impl Controller for ArnController {
     }
 }
 
+/// Settings for running the server.
+#[derive(Debug, PartialEq)]
+pub struct Options {
+    /// Address to serve on, as "host:port".
+    pub listen: String,
+
+    /// Temperature for phenomes which do not specify one. If this is `None`
+    /// then use `DEFAULT_TEMPERATURE`.
+    pub temperature: Option<f64>,
+}
+
 /// The result of parsing the command line.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Cli {
-    /// Serve on this address, as "host:port".
-    Serve(String),
+    /// Run the server.
+    Serve(Options),
 
     /// Print this text and exit successfully.
     Print(String),
 }
 
+/// Parse the argument of the `--temperature` flag.
+fn parse_temperature(text: &str) -> Result<f64, String> {
+    match text.parse::<f64>() {
+        Ok(temperature) if temperature.is_finite() && temperature >= 0.0 => Ok(temperature),
+        _ => Err(format!(
+            "expected a finite non-negative number for --temperature, found {text}"
+        )),
+    }
+}
+
 /// Parse the command line arguments, where `args[0]` is the program name.
 pub fn parse_args(args: &[String]) -> Result<Cli, String> {
-    let (mut host, mut port, mut listen) = (None, None, None);
+    let (mut host, mut port, mut listen, mut temperature) = (None, None, None, None);
     let mut args = args.iter().skip(1);
     while let Some(flag) = args.next() {
         let slot = match flag.as_str() {
             "--host" => &mut host,
             "--port" => &mut port,
             "--listen" => &mut listen,
+            "--temperature" => &mut temperature,
             "--version" => return Ok(Cli::Print(VERSION.to_string())),
             "-h" | "--help" => return Ok(Cli::Print(HELP.to_string())),
             _ => return Err(format!("unrecognized argument: {flag}")),
@@ -318,17 +396,21 @@ pub fn parse_args(args: &[String]) -> Result<Cli, String> {
     if listen.is_some() && (host.is_some() || port.is_some()) {
         return Err("options --host & --port are incompatible with --listen".to_string());
     }
-    if let Some(listen) = listen {
-        return Ok(Cli::Serve(listen));
-    }
-    if let Some(port) = &port
-        && port.parse::<u16>().is_err()
-    {
-        return Err(format!("expected port number [0-65535], found {port}"));
-    }
-    let host = host.unwrap_or_else(|| "127.0.0.1".to_string());
-    let port = port.unwrap_or_else(|| "47001".to_string());
-    Ok(Cli::Serve(format!("{host}:{port}")))
+    let listen = match listen {
+        Some(listen) => listen,
+        None => {
+            if let Some(port) = &port
+                && port.parse::<u16>().is_err()
+            {
+                return Err(format!("expected port number [0-65535], found {port}"));
+            }
+            let host = host.unwrap_or_else(|| "127.0.0.1".to_string());
+            let port = port.unwrap_or_else(|| "47001".to_string());
+            format!("{host}:{port}")
+        }
+    };
+    let temperature = temperature.map(|text| parse_temperature(&text)).transpose()?;
+    Ok(Cli::Serve(Options { listen, temperature }))
 }
 
 #[cfg(test)]
@@ -507,13 +589,108 @@ mod tests {
     }
 
     #[test]
-    fn initialize_again_replaces_the_network() {
+    fn initialize_twice_fails() {
+        let mut session = Session::default();
+        session.handle(init(simple())).unwrap();
+        // The same phenome, a different phenome, and a broken phenome are all
+        // refused for the same reason: the session is already initialized.
+        for second in [simple(), phenome(2.0, 3, "[]", "[]", &[0.0; 9]), b"hello".to_vec()] {
+            let status = session.handle(init(second)).unwrap_err();
+            assert_eq!(status.code(), tonic::Code::FailedPrecondition);
+        }
+    }
+
+    #[test]
+    fn initialize_twice_fails_even_after_other_commands() {
         let mut session = Session::default();
         session.handle(init(simple())).unwrap();
         session.handle(inputs(vec![number(0, 1.0)])).unwrap();
         session.handle(advance(1.0)).unwrap();
+        session.handle(request(Command::Reset(ResetRequest {}))).unwrap();
+        let status = session.handle(init(simple())).unwrap_err();
+        assert_eq!(status.code(), tonic::Code::FailedPrecondition);
+    }
+
+    #[test]
+    fn failed_initialize_does_not_count_as_initialized() {
+        // Sessions end on error, but the handler itself must not be left
+        // half-initialized by a phenome which was rejected.
+        let mut session = Session::default();
+        let status = session.handle(init(b"hello".to_vec())).unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
         session.handle(init(simple())).unwrap();
         assert_close(&read(&mut session, vec![0]), &[1.0]);
+    }
+
+    /// Two uncoupled genes, where gene 0 is the input, and both genes are outputs.
+    /// This phenome does not specify a temperature.
+    fn no_temperature() -> Vec<u8> {
+        br#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#.to_vec()
+    }
+
+    /// The same network as `no_temperature`, with the temperature specified.
+    fn with_temperature(temperature: f64) -> Vec<u8> {
+        phenome(temperature, 2, "[[0]]", "[[0],[1]]", &[0.0; 4])
+    }
+
+    /// Drive gene 0 with an input of 1 for one second, returns the outputs.
+    fn drive(session: &mut Session, phenome: Vec<u8>) -> Vec<f64> {
+        session.handle(init(phenome)).unwrap();
+        session.handle(inputs(vec![number(0, 1.0)])).unwrap();
+        session.handle(advance(1.0)).unwrap();
+        read(session, vec![0, 1])
+    }
+
+    #[test]
+    fn missing_temperature_uses_the_default() {
+        // T = 1: gene 0 is 1+1 = 2 and gene 1 is 1, renormalized by 2/3.
+        let expected = [4.0 / 3.0, 2.0 / 3.0];
+        assert_close(&drive(&mut Session::default(), no_temperature()), &expected);
+        assert_close(
+            &drive(&mut Session::new(DEFAULT_TEMPERATURE), no_temperature()),
+            &expected,
+        );
+        // The default is the same as an explicit T of 1.
+        assert_close(&drive(&mut Session::default(), with_temperature(1.0)), &expected);
+    }
+
+    #[test]
+    fn missing_temperature_uses_the_session_temperature() {
+        // T = 2: gene 0 is 1+2 = 3 and gene 1 is 1, renormalized by 2/4.
+        let outputs = drive(&mut Session::new(2.0), no_temperature());
+        assert_close(&outputs, &[1.5, 0.5]);
+        // T = 0: the network is frozen.
+        let outputs = drive(&mut Session::new(0.0), no_temperature());
+        assert_close(&outputs, &[1.0, 1.0]);
+    }
+
+    #[test]
+    fn null_temperature_is_missing() {
+        let phenome = br#"{"T":null,"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#.to_vec();
+        assert_close(&drive(&mut Session::new(2.0), phenome), &[1.5, 0.5]);
+    }
+
+    #[test]
+    fn phenome_temperature_takes_precedence() {
+        // The phenome says T = 1, so the session temperature of 5 is ignored.
+        let outputs = drive(&mut Session::new(5.0), with_temperature(1.0));
+        assert_close(&outputs, &[4.0 / 3.0, 2.0 / 3.0]);
+        // Even a phenome temperature of zero is a choice, not a missing value.
+        let outputs = drive(&mut Session::new(5.0), with_temperature(0.0));
+        assert_close(&outputs, &[1.0, 1.0]);
+    }
+
+    #[test]
+    fn invalid_temperatures_are_rejected() {
+        // A bad temperature is rejected wherever it came from.
+        let status = Session::new(-1.0).handle(init(no_temperature())).unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        let status = Session::new(f64::NAN).handle(init(no_temperature())).unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        let status = Session::new(1.0)
+            .handle(init(phenome(f64::INFINITY, 2, "[]", "[]", &[0.0; 4])))
+            .unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
     }
 
     #[test]
@@ -542,7 +719,7 @@ mod tests {
             ("output gene out of range", phenome(1.0, 2, "[]", "[[0,9]]", &w4)),
         ];
         for (description, bytes) in bad {
-            let status = RegulatoryNetwork::from_phenome(&bytes).unwrap_err();
+            let status = RegulatoryNetwork::from_phenome(&bytes, DEFAULT_TEMPERATURE).unwrap_err();
             assert_eq!(status.code(), tonic::Code::InvalidArgument, "{description}");
             let status = Session::default().handle(init(bytes)).unwrap_err();
             assert_eq!(status.code(), tonic::Code::InvalidArgument, "{description}");
@@ -615,7 +792,12 @@ mod tests {
 
     #[test]
     fn cli_listen_address() {
-        let serve = |s: &str| Ok(Cli::Serve(s.to_string()));
+        let serve = |s: &str| {
+            Ok(Cli::Serve(Options {
+                listen: s.to_string(),
+                temperature: None,
+            }))
+        };
         assert_eq!(parse_args(&args(&[])), serve("127.0.0.1:47001"));
         assert_eq!(
             parse_args(&args(&["--listen", "127.0.0.1:5000"])),
@@ -624,6 +806,39 @@ mod tests {
         assert_eq!(parse_args(&args(&["--port", "5000"])), serve("127.0.0.1:5000"));
         assert_eq!(parse_args(&args(&["--host", "0.0.0.0"])), serve("0.0.0.0:47001"));
         assert_eq!(parse_args(&args(&["--host", "::1", "--port", "80"])), serve("::1:80"));
+    }
+
+    #[test]
+    fn cli_temperature() {
+        let serve = |listen: &str, temperature: Option<f64>| {
+            Ok(Cli::Serve(Options {
+                listen: listen.to_string(),
+                temperature,
+            }))
+        };
+        // Optional, so the default is to leave it unset.
+        assert_eq!(parse_args(&args(&[])), serve("127.0.0.1:47001", None));
+        assert_eq!(
+            parse_args(&args(&["--temperature", "2.5"])),
+            serve("127.0.0.1:47001", Some(2.5))
+        );
+        assert_eq!(
+            parse_args(&args(&["--temperature", "0"])),
+            serve("127.0.0.1:47001", Some(0.0))
+        );
+        assert_eq!(
+            parse_args(&args(&["--temperature", "1e-3"])),
+            serve("127.0.0.1:47001", Some(0.001))
+        );
+        // It combines with every way of choosing the address, in any order.
+        assert_eq!(
+            parse_args(&args(&["--temperature", "3", "--listen", "127.0.0.1:5000"])),
+            serve("127.0.0.1:5000", Some(3.0))
+        );
+        assert_eq!(
+            parse_args(&args(&["--port", "5000", "--temperature", "3"])),
+            serve("127.0.0.1:5000", Some(3.0))
+        );
     }
 
     #[test]
@@ -636,6 +851,13 @@ mod tests {
             &["--listen", "a:1", "--port", "2"],
             &["--listen", "a:1", "--host", "b"],
             &["--port", "1", "--port", "2"],
+            &["--temperature"],
+            &["--temperature", "hot"],
+            &["--temperature", ""],
+            &["--temperature", "-1"],
+            &["--temperature", "NaN"],
+            &["--temperature", "inf"],
+            &["--temperature", "1", "--temperature", "2"],
         ] {
             assert!(parse_args(&args(bad)).is_err(), "{bad:?}");
         }

@@ -8,12 +8,16 @@ as a gRPC server for the `controller.Controller` service (see
 ## Running
 
 ```
-arn [--listen <ADDRESS:PORT> | --host <ADDRESS> --port <PORT>]
+arn [--listen <ADDRESS:PORT> | --host <ADDRESS> --port <PORT>] [--temperature <T>]
 ```
 
 The address must be an IP address and a port, such as `127.0.0.1:47001`, which
 is the default. The options `--host` and `--port` are incompatible with
 `--listen`. Also see `--help` and `--version`.
+
+The optional `--temperature` argument is a non-negative number, which is used
+for every phenome that does not specify its own temperature `T`. The default is
+1.0. A temperature in the phenome takes precedence over this argument.
 
 
 ## Phenome Format
@@ -23,7 +27,7 @@ UTF-8 encoded, and it is a single JSON Object with the following attributes:
 
 | Attribute | JSON Type | Description |
 | :-------- | :-------: | :---------- |
-| T | Number | Temperature, a non-negative scaling factor for the rate of change |
+| T | Number, optional | Temperature, a non-negative scaling factor for the rate of change. If missing, then the `--temperature` argument is used. |
 | N | Integer | Number of genes in the network, must be positive |
 | W | Array of Numbers | Weights matrix (N x N), flattened in row-major format |
 | I | Array of Array of Integer | Indices of input genes |
