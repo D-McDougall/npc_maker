@@ -5,15 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from run_nk import run_nk
 
-eval_limit = 1000
+eval_limit = 500
 
-samples = 3
+samples = 2
 
 seed_matrix = [87654]
 
 test_matrix = [
-    (100, 4, "-p 20 -s normalized=1 --parents 1".split()),
-    (100, 4, "-p 20 -s normalized=1 --parents 2".split()),
+    (100, 4, "-p 20 -s normalized=1 --parents 1"),
+    (100, 4, "-p 20 -s normalized=1 --parents 2"),
 ]
 
 colors = 'rbgypkc'
@@ -23,13 +23,13 @@ def main():
         traces = []
         for seed in seed_matrix:
             for _iteration in range(samples):
-                evolution = ['npc-evo'] + evo_args
+                evolution = ['npc-evo'] + evo_args.split()
                 trace = run_nk(n=n, k=k, seed=seed, evolution=evolution, death_limit=eval_limit)
                 evals, scores = zip(*trace)
-                plt.plot(evals, scores, color=colors[i % len(colors)])
+                plt.plot(evals, scores, color=colors[i % len(colors)], label=evo_args)
                 scores = resample(evals, scores, grid)
                 traces.append(scores)
-        plt.show()
+    plt.show()
 
 
 # Log-spaced to capture dynamics of early progress.
