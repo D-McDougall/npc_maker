@@ -202,8 +202,10 @@ def run_nk(n=N, k=K, seed=SEED, score_limit=SCORE_LIMIT,
         return success, message
 
 
-def test_monoploid_binary():
-    success, message = run_nk()
+def test_monoploid():
+    success, message = run_nk(n=100, k=4, seed=42,
+        score_limit=0.75, death_limit=10000,
+        evolution="npc-evo -p 100 -r generation -s normalized=1 --parents 1".split())
     assert success, message
 
 

@@ -43,5 +43,6 @@ python tests/nk/nk_environment.py --listen HOST:PORT N K SEED
 
 ## References
 
-Bull, L. (2019). *A Simple Haploid-Diploid Evolutionary Algorithm*. arXiv:1903.11598. https://doi.org/10.48550/arXiv.1903.11598
+Bull, L. (2019). *A Simple Haploid-Diploid Evolutionary Algorithm*.
+arXiv:1903.11598. https://doi.org/10.48550/arXiv.1903.11598
 
