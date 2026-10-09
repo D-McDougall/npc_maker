@@ -221,7 +221,7 @@ def main():
                              "(default: %(default)s)")
     parser.add_argument("--death-limit", type=int, default=DEATH_LIMIT,
                         help="fail when deaths exceed this (default: %(default)s)")
-    parser.add_argument("--evoultion", default=" ".join(EVOLUTION),
+    parser.add_argument("--evolution", default=" ".join(EVOLUTION),
                         help="evolution service command (default: %(default)s)")
     args = parser.parse_args()
 
@@ -236,7 +236,7 @@ def main():
 
     success, message = run_nk(
         args.n, args.k, args.seed, args.score_limit, args.death_limit,
-        args.evoultion.split())
+        args.evolution.split())
     print(f"{'SUCCESS' if success else 'FAILURE'}: {message}")
     return 0 if success else 1
 
