@@ -88,14 +88,16 @@ def test_xor_smoke():
         try:
             ready = grpc.channel_ready_future(channel)
             deadline = time.monotonic() + 30
-            if server.poll() is not None:
-                raise AssertionError(
-                    f"npc-server exited during startup ({server.returncode})")
-            try:
-                ready.result(timeout=0.25)
-            except grpc.FutureTimeoutError:
-                if time.monotonic() >= deadline:
-                    raise AssertionError("timed out waiting for npc-server")
+            while True:
+                if server.poll() is not None:
+                    raise AssertionError(
+                        f"npc-server exited during startup ({server.returncode})")
+                try:
+                    ready.result(timeout=0.25)
+                    break
+                except grpc.FutureTimeoutError:
+                    if time.monotonic() >= deadline:
+                        raise AssertionError("timed out waiting for npc-server")
 
             diagnostics = diagnostics_pb2_grpc.DiagnosticsStub(channel)
             organism = diagnostics_pb2.Organism(body_type="xor")

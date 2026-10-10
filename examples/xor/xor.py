@@ -114,15 +114,16 @@ def _start_controller(command):
     ready = grpc.channel_ready_future(channel)
     deadline = time.monotonic() + 30
     try:
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"controller exited during startup (status {process.returncode})")
-        try:
-            ready.result(timeout=0.25)
-            return process, channel
-        except grpc.FutureTimeoutError:
-            if time.monotonic() >= deadline:
-                raise RuntimeError("timed out waiting for XOR controller")
+        while True:
+            if process.poll() is not None:
+                raise RuntimeError(
+                    f"controller exited during startup (status {process.returncode})")
+            try:
+                ready.result(timeout=0.25)
+                return process, channel
+            except grpc.FutureTimeoutError:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("timed out waiting for XOR controller")
     except BaseException:
         channel.close()
         process.terminate()
