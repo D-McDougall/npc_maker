@@ -4,9 +4,8 @@
     edition         = "2021"
     description     = "Exclusive-Or environment for the NPC Maker"
     keywords        = ["npc-maker", "environment"]
-    repository      = "https://github.com/ctrl-z-9000-times/npc_maker"
 
 [dependencies]
     npc_maker           = { path = "../../rust/" }
-    serde               = { version = "1.0" }
-    serde_json          = { version = "1.0" }
+    serde               = { version = "1" }
+    serde_json          = { version = "1" }
