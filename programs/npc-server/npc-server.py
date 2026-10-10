@@ -211,9 +211,8 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             child = Individual.reproduce([parents[0]])
             child.genome = parents[0].genome
         else:
-            raise RuntimeError(
-                f'cannot spawn body type "{body_type}": '
-                "no genetics service and no parent was selected")
+            # No evolution and no genetics.
+            child = Individual()
 
         self._set_defaults(child)
         child.birth_date = datetime.datetime.now()
