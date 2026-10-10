@@ -206,7 +206,13 @@ impl RegulatoryNetwork {
         for x in &mut self.state {
             *x = x.max(0.0);
         }
-        self.state *= self.num_states() as f64 / self.state.sum();
+        let sum = self.state.sum();
+        if sum > 0.0 {
+            self.state *= self.num_states() as f64 / sum;
+        }
+        else {
+            self.state.fill(1.0 / self.state.len() as f64);
+        }
         Ok(())
     }
 }

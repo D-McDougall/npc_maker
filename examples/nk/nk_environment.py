@@ -161,6 +161,9 @@ def main():
             environment.Death(
                 environment_pb2.DeathRequest(name=individual.metadata.name)
             )
+    except grpc.RpcError as error:
+        if error.code() != grpc.StatusCode.UNAVAILABLE:
+            raise
     finally:
         channel.close()
 
