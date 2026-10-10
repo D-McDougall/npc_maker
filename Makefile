@@ -55,7 +55,7 @@ install: package
 	$(PIP) install --force-reinstall dist/npc_maker-*.whl
 
 test: install
-	cargo test
+	cargo test --workspace
 	$(PYTEST) python
 	# Whitelist the examples directory, since it contains untracked subdirectories.
 	$(PYTEST) examples/nk

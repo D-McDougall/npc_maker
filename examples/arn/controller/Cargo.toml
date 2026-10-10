@@ -1,7 +1,8 @@
 [package]
-    name        = "arn"
+    name        = "arn_controller"
+    version     = "0.1.0"
     edition     = "2024"
-    description = "Artificial Regulatory Network Controller for the NPC Maker"
+    description = "Artificial Regulatory Network (ARN) Controller for the NPC Maker"
 
 [dependencies]
     npc_maker   = {path = "../../../rust"}

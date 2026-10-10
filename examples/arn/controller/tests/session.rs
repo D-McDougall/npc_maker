@@ -1,6 +1,6 @@
 //! End-to-end tests: a real gRPC client talking to the server over loopback.
 
-use arn::ArnController;
+use arn_controller::ArnController;
 use npc_maker::controller::{
     AdvanceRequest, ControllerRequest, ControllerResponse, GetOutputsRequest, InitializeRequest, IoValue,
     SetInputsRequest, controller_client::ControllerClient, controller_request::Command,

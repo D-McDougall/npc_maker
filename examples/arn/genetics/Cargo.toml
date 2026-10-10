@@ -1,0 +1,13 @@
+[package]
+    name        = "arn_genetics"
+    version     = "0.1.0"
+    edition     = "2024"
+    description = "Artificial Regulatory Network (ARN) Genetics for the NPC Maker"
+
+[dependencies]
+    bitvec      = {version = "1", features = ["serde"]}
+    postcard    = {version = "1", features = ["use-std"]}
+    rand        = "0.10"
+    serde       = {version = "1", features = ["derive"]}
+    serde_json  = "1"
+    thiserror   = "2"

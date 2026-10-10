@@ -1,4 +1,4 @@
-use arn::{ArnController, Cli, DEFAULT_TEMPERATURE, parse_args};
+use arn_controller::{ArnController, Cli, DEFAULT_TEMPERATURE, parse_args};
 use npc_maker::controller::controller_server::ControllerServer;
 use std::net::SocketAddr;
 use tonic::transport::Server;

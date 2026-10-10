@@ -1,6 +1,12 @@
 [workspace]
     resolver = "3"
-    members = ["rust", "programs/npc-evo", "programs/npc-server", "examples/arn/controller"]
+    members = [
+        "rust",
+        "programs/npc-evo",
+        "programs/npc-server",
+        "examples/arn/controller",
+        "examples/arn/genetics",
+    ]
 
 [workspace.package]
     rust-version = "1.91"
