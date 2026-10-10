@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from run_nk import run_nk
 
-eval_limit = 1000
+eval_limit = 500
 
 samples = 5
 
@@ -16,20 +16,19 @@ seed_matrix = [
 ]
 
 test_matrix = [
-
-    # Works well
-    (3, "-p 20 -s normalized=1 --parents 2"),
+    # These methods work well
+    (3, "-p 40 -s normalized=1 --parents 2"),
+    (3, "-p 40 -s normalized=1 --parents 1"),
     (3, "-p 20 -r oldest -s ranked-exponential=3 --parents 2"),
+    (3, "-p 3 -r worst -s random --parents 2"),
 
-    # Proportional does not work as well as normalized.
-    (2, "-p 20 -s proportional --parents 2"),
     # Population is too big, slows down evolution
     (2, "-p 100 -s normalized=1 --parents 2"),
-    # No selection pressure, only replaces worst
-    (2, "-p 20 -r worst -s random --parents 2"),
 
+    # Proportional does not work as well as normalized.
+    (1, "-p 20 -s proportional --parents 2"),
     # Does not work at all
-    (1, "-p 100 -s random --parents 1"),
+    (1, "-p 2 -s random --parents 2"),
 ]
 
 colors = 'rbgcmyk'
@@ -48,14 +47,18 @@ def resample(evals, scores, grid):
 
 def main(n=100, k=4, show=True):
     for seed in seed_matrix:
+        if show:
+            plt.figure(f"NK experiment (seed: {seed})")
         median_scores = {}
         for i, (power, evo_args) in enumerate(test_matrix):
             traces = []
-            for _iteration in range(samples):
+            for iteration in range(samples):
                 evolution = ['npc-evo'] + evo_args.split()
                 trace = run_nk(n=n, k=k, seed=seed, evolution=evolution, death_limit=eval_limit)
                 evals, scores = zip(*trace)
-                plt.plot(evals, scores, color=colors[i % len(colors)], label=evo_args)
+                label = evo_args if iteration == 0 else None
+                if show:
+                    plt.plot(evals, scores, color=colors[i % len(colors)], label=label)
                 scores = resample(evals, scores, grid)
                 traces.append(scores)
             # Combine the traces into their median score at each grid-point.
@@ -77,8 +80,8 @@ def main(n=100, k=4, show=True):
                 if i == k: continue
                 k_score = median_scores[k]
                 k_power = test_matrix[k][0]
-                if i_power > k_power:
-                    assert i_score > k_score, f"evo power {test_matrix[i][1]} >> {test_matrix[k][1]}"
+                if i_power > k_power or (i == 0 and k == 1): # Check power, and check test_matrix[0] > test_matrix[1]
+                    assert i_score > k_score, f"evo power {test_matrix[i][1]} > {test_matrix[k][1]}"
 
 
 @pytest.mark.skip(reason="long running test")

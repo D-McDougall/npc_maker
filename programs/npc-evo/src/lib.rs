@@ -402,6 +402,8 @@ fn score_fn(metadata: &Metadata) -> (f64, u64) {
     let ascension = metadata.ascension.unwrap_or(u64::MAX);
     (score, ascension)
 }
+/// This sorts individuals by score (descending) and tiebreaks with the
+/// ascension (ascending).
 fn compare_scores(a: &Metadata, b: &Metadata) -> std::cmp::Ordering {
     let (a_score, a_ascension) = score_fn(a);
     let (b_score, b_ascension) = score_fn(b);
@@ -530,7 +532,7 @@ impl Evolution {
                         .population
                         .iter()
                         .enumerate()
-                        .min_by(|a, b| compare_scores(a.1, b.1))
+                        .max_by(|a, b| compare_scores(a.1, b.1))
                         .unwrap();
                     let worst_individual = self.population.swap_remove(worst_index);
                     worst_individual.delete(self.get_population_path()).unwrap();
