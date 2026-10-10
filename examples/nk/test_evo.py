@@ -10,7 +10,10 @@ eval_limit = 1000
 
 samples = 5
 
-seed_matrix = [87654]
+seed_matrix = [
+    1234,
+    5678,
+]
 
 test_matrix = [
 
@@ -18,15 +21,15 @@ test_matrix = [
     (3, "-p 20 -s normalized=1 --parents 2"),
     (3, "-p 20 -r oldest -s ranked-exponential=3 --parents 2"),
 
-    # Proportional does not work for this score function.
+    # Proportional does not work as well as normalized.
     (2, "-p 20 -s proportional --parents 2"),
     # Population is too big, slows down evolution
-    (2, "-p 200 -s normalized=1 --parents 2"),
-    # No selection pressure, replace worst only, monoploid genetics
-    (2, "-p 20 -r worst -s random --parents 1"),
+    (2, "-p 100 -s normalized=1 --parents 2"),
+    # No selection pressure, only replaces worst
+    (2, "-p 20 -r worst -s random --parents 2"),
 
     # Does not work at all
-    (1, "-p 20 -s random --parents 2"),
+    (1, "-p 100 -s random --parents 1"),
 ]
 
 colors = 'rbgcmyk'
@@ -70,12 +73,12 @@ def main(n=100, k=4, show=True):
             print(f"{i_score} \t{i_method}")
         for i, i_score in median_scores.items():
             i_power = test_matrix[i][0]
-            for j in range(len(test_matrix)):
-                if i == j: continue
-                j_score = median_scores[j]
-                j_power = test_matrix[i][0]
-                if i_power > j_power:
-                    assert i_score > j_score, f"evo power {test_matrix[i][1]} >> {test_matrix[j][1]}"
+            for k in range(len(test_matrix)):
+                if i == k: continue
+                k_score = median_scores[k]
+                k_power = test_matrix[k][0]
+                if i_power > k_power:
+                    assert i_score > k_score, f"evo power {test_matrix[i][1]} >> {test_matrix[k][1]}"
 
 
 @pytest.mark.skip(reason="long running test")

@@ -57,7 +57,9 @@ install: package
 test: install
 	cargo test
 	$(PYTEST) python
-	$(PYTEST) tests
+	# Whitelist the examples directory, since it contains untracked subdirectories.
+	$(PYTEST) examples/nk
+	$(PYTEST) examples/arn
 
 clean:
 	rm -rf $(PYTHON_OUT)/*_pb2.py 	  	# protobuf
