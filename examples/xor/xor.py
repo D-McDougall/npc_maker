@@ -107,7 +107,7 @@ def _free_port():
         return sock.getsockname()[1]
 
 
-def _start_controller(command, phenome):
+def _start_controller(command):
     address = f"127.0.0.1:{_free_port()}"
     process = subprocess.Popen([*command, "--listen", address])
     channel = grpc.insecure_channel(address)
@@ -119,8 +119,7 @@ def _start_controller(command, phenome):
                 f"controller exited during startup (status {process.returncode})")
         try:
             ready.result(timeout=0.25)
-            return process, channel, ControllerSession(
-                controller_pb2_grpc.ControllerStub(channel), phenome)
+            return process, channel
         except grpc.FutureTimeoutError:
             if time.monotonic() >= deadline:
                 raise RuntimeError("timed out waiting for XOR controller")
@@ -139,18 +138,29 @@ def main():
 
     channel = grpc.insecure_channel(args.listen)
     environment = environment_pb2_grpc.EnvironmentStub(channel)
+    controller_command = None
+    controller_process = None
+    controller_channel = None
     try:
         while True:
             individual = environment.Spawn(environment_pb2.SpawnRequest())
-            process, controller_channel, controller = _start_controller(
-                individual.metadata.controller, individual.phenome)
+            command = tuple(individual.metadata.controller)
+            if command != controller_command:
+                if controller_process is not None:
+                    controller_channel.close()
+                    controller_process.terminate()
+                    controller_process.wait()
+                controller_process, controller_channel = _start_controller(command)
+                controller_command = command
+
+            controller = ControllerSession(
+                controller_pb2_grpc.ControllerStub(controller_channel),
+                individual.phenome,
+            )
             try:
                 score = evaluate(controller, args.verbose)
             finally:
                 controller.close()
-                controller_channel.close()
-                process.terminate()
-                process.wait()
 
             environment.Score(environment_pb2.ScoreRequest(
                 name=individual.metadata.name, score=score))
@@ -160,6 +170,10 @@ def main():
         if error.code() != grpc.StatusCode.UNAVAILABLE:
             raise
     finally:
+        if controller_process is not None:
+            controller_channel.close()
+            controller_process.terminate()
+            controller_process.wait()
         channel.close()
 
 
