@@ -5,7 +5,7 @@ Exclusive-Or test environment.
 The exclusive-or function (a.k.a. XOR) is a very simple boolean function.
 It is difficult because it is not linearly separable, meaning that implementing
 the XOR function using a neural network requires at least one hidden node.
-It can not be solved by only connecting the inputs directly to the outputs.
+It can not be solved by connecting the inputs directly to the outputs.
 
 The XOR task serves as a starting point for experimenting with evolving neural
 networks. It is one of the simplest non-trivial tasks.
@@ -18,30 +18,6 @@ networks. It is one of the simplest non-trivial tasks.
 |  true   |  false  |     true     |
 |  true   |  true   |     false    |
 +---------+---------+--------------+
-
-
-A reasonable initial seed genotype for this environment is to simply connect
-both of the inputs directly to the output node. For example:
-
-[{"name": 0, "type": "Node"},
- {"name": 1, "type": "Node"},
- {"name": 2, "type": "Node"},
- {"name": 3, "type": "Edge", "presyn": 0, "postsyn": 3, "weight": 0},
- {"name": 4, "type": "Edge", "presyn": 1, "postsyn": 3, "weight": 0}]
-
-This environment can be solved using only a single hidden node.
-For example, here is a hand-crafted solution:
-
-[{"name": 0, "type": "Node", "slope": 2.0, "threshold":  0.5},
- {"name": 1, "type": "Node", "slope": 2.0, "threshold":  0.5},
- {"name": 2, "type": "Node", "slope": 2.0, "threshold":  0.5},
- {"name": 3, "type": "Node", "slope": 2.0, "threshold":  2.0},
- {"name": 4, "type": "Edge", "presyn": 0, "postsyn": 2, "weight": 1.0},
- {"name": 5, "type": "Edge", "presyn": 1, "postsyn": 2, "weight": 1.0},
- {"name": 6, "type": "Edge", "presyn": 3, "postsyn": 2, "weight": -4.0},
- {"name": 7, "type": "Edge", "presyn": 0, "postsyn": 3, "weight": 1.0},
- {"name": 8, "type": "Edge", "presyn": 1, "postsyn": 3, "weight": 1.0}]
-
 """
 
 from npc_maker import env
