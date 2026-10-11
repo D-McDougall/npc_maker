@@ -18,7 +18,7 @@ class Context:
         raise AbortError(code, details)
 
 
-class TestGenetics(Genetics):
+class ExampleGenetics(Genetics):
     def __init__(self, result=None, error=None):
         self.result = result
         self.error = error
@@ -32,7 +32,7 @@ class TestGenetics(Genetics):
 
 
 def test_reproduce_allows_founder_without_genetic_fields():
-    service = TestGenetics()
+    service = ExampleGenetics()
     response = service.Reproduce(genetics_pb2.ReproduceRequest(), Context())
 
     child = Individual.from_proto(response.child)
@@ -49,7 +49,7 @@ def test_reproduce_wraps_parent_protobufs():
     request = genetics_pb2.ReproduceRequest()
     request.parents.add().CopyFrom(parent.to_proto())
 
-    service = TestGenetics()
+    service = ExampleGenetics()
     service.Reproduce(request, Context())
 
     assert len(service.received_parents) == 1
@@ -58,7 +58,7 @@ def test_reproduce_wraps_parent_protobufs():
 
 
 def test_reproduce_maps_value_error_to_invalid_argument():
-    service = TestGenetics(error=ValueError("invalid genome"))
+    service = ExampleGenetics(error=ValueError("invalid genome"))
 
     with pytest.raises(AbortError) as error:
         service.Reproduce(genetics_pb2.ReproduceRequest(), Context())
@@ -68,7 +68,7 @@ def test_reproduce_maps_value_error_to_invalid_argument():
 
 
 def test_reproduce_rejects_non_individual_return():
-    service = TestGenetics(result=object())
+    service = ExampleGenetics(result=object())
 
     with pytest.raises(AbortError) as error:
         service.Reproduce(genetics_pb2.ReproduceRequest(), Context())
@@ -79,7 +79,7 @@ def test_reproduce_rejects_non_individual_return():
 def test_reproduce_rejects_empty_child_name():
     child = Individual()
     child.name = ""
-    service = TestGenetics(result=child)
+    service = ExampleGenetics(result=child)
 
     with pytest.raises(AbortError) as error:
         service.Reproduce(genetics_pb2.ReproduceRequest(), Context())
