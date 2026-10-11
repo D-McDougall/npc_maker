@@ -12,11 +12,8 @@ homologous vectors. Founders receive one random binary vector.
 import argparse
 import json
 import random
-from concurrent import futures
 
-import grpc
-
-from npc_maker import genetics_pb2, genetics_pb2_grpc
+from npc_maker.genetics import Genetics
 from npc_maker.individual import Individual
 
 
@@ -66,13 +63,17 @@ def _make_phenome(genome):
     ]
 
 
-class PolyploidGenetics(genetics_pb2_grpc.GeneticsServicer):
+class PolyploidGenetics(Genetics):
+    """Polyploid binary genetics implementation for the NK environment."""
+
     def __init__(self, n):
+        if n <= 0:
+            raise ValueError("N must be greater than zero")
         self.n = n
 
-    def Reproduce(self, request, context):
-        if request.parents:
-            parents = [Individual.from_proto(proto) for proto in request.parents]
+    def reproduce(self, parents):
+        """Create a random founder or recombine parent genomes into offspring."""
+        if parents:
             parent_genomes = [
                 _decode_genome(parent, self.n) for parent in parents
             ]
@@ -86,7 +87,7 @@ class PolyploidGenetics(genetics_pb2_grpc.GeneticsServicer):
 
         child.genome = json.dumps(genome).encode("utf-8")
         child.phenome = json.dumps(_make_phenome(genome)).encode("utf-8")
-        return genetics_pb2.ReproduceResponse(child=child.to_proto())
+        return child
 
 
 def main():
@@ -98,20 +99,7 @@ def main():
     if args.N <= 0:
         parser.error("N must be greater than zero")
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    genetics_pb2_grpc.add_GeneticsServicer_to_server(
-        PolyploidGenetics(args.N),
-        server,
-    )
-    server.add_insecure_port(args.listen)
-    server.start()
-
-    try:
-        server.wait_for_termination()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.stop(0).wait()
+    PolyploidGenetics.main(args.listen, args.N)
 
 
 if __name__ == "__main__":
