@@ -22,8 +22,11 @@ from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 
 class XorController(controller_pb2_grpc.ControllerServicer):
     """
-    Minimal controller that returns the exact XOR of its two inputs.
+    Minimal controller that returns a logical function of its two inputs.
     """
+    def __init__(self, function="xor"):
+        self.function = function
+
     def Session(self, requests, context):
         inputs = [0.0, 0.0]
         for request in requests:
@@ -35,7 +38,15 @@ class XorController(controller_pb2_grpc.ControllerServicer):
                     if value.id < 2:
                         inputs[value.id] = value.number
             elif command == "get_outputs":
-                result = float(bool(inputs[0]) != bool(inputs[1]))
+                left, right = bool(inputs[0]), bool(inputs[1])
+                result = float({
+                    "xor": left != right,
+                    "and": left and right,
+                    "or": left or right,
+                    "nand": not (left and right),
+                    "nor": not (left or right),
+                    "eq": left == right,
+                }[self.function])
                 yield controller_pb2.ControllerResponse(
                     request_id=request.request_id,
                     outputs=[controller_pb2.IoValue(
@@ -48,9 +59,12 @@ def _run_controller():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--controller", action="store_true")
     parser.add_argument("--listen", required=True)
+    parser.add_argument("function", nargs="?", default="xor",
+                        choices=("xor", "and", "or", "nand", "nor", "eq"))
     args = parser.parse_args()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    controller_pb2_grpc.add_ControllerServicer_to_server(XorController(), server)
+    controller_pb2_grpc.add_ControllerServicer_to_server(
+        XorController(args.function), server)
     server.add_insecure_port(args.listen)
     server.start()
     server.wait_for_termination()
@@ -62,14 +76,14 @@ def _free_port():
         return sock.getsockname()[1]
 
 
-def _run_xor_smoke(environment_command, label):
+def _run_smoke_test(environment_command, label, function):
     controller = Path(__file__).resolve()
     server_script = "npc-server.py"
 
     config = {
         "name": f"XOR smoke test ({label})",
         "environment": environment_command,
-        "controller": [sys.executable, str(controller), "--controller"],
+        "controller": [sys.executable, str(controller), "--controller", function],
         "organisms": [{"body_type": "xor"}],
     }
 
@@ -111,7 +125,7 @@ def _run_xor_smoke(environment_command, label):
             else:
                 raise AssertionError("XOR environment did not finish an evaluation")
 
-            assert diagnostics.MaximumScore(organism).score == 16.0
+            return diagnostics.MaximumScore(organism).score
         finally:
             channel.close()
             if server.poll() is None:
@@ -123,18 +137,24 @@ def _run_xor_smoke(environment_command, label):
                 server.wait(timeout=5)
 
 
-def test_xor_smoke():
+def test_smoke():
     xor_dir = Path(__file__).resolve().parent
     repo = xor_dir.parents[1]
     python_environment = [sys.executable, str(xor_dir / "xor.py")]
     rust_environment = [str(repo / "target" / "release" / "xor")]
 
-    _run_xor_smoke(python_environment, "python")
-    _run_xor_smoke(rust_environment, "rust")
+    assert _run_smoke_test(python_environment, "python", "xor") == 16
+    assert _run_smoke_test(rust_environment, "rust", "xor") == 16
+
+    assert _run_smoke_test(python_environment, "python", "or") == 9
+    assert _run_smoke_test(rust_environment, "rust", "or") == 9
+
+    assert _run_smoke_test(python_environment, "python", "eq") == 0
+    assert _run_smoke_test(rust_environment, "rust", "eq") == 0
 
 
 if __name__ == "__main__":
     if "--controller" in sys.argv[1:]:
         _run_controller()
     else:
-        test_xor_smoke()
+        test_smoke()
