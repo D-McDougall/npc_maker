@@ -1,11 +1,7 @@
 use arn_genetics::Genome;
-use npc_maker::genetics::{
-    ReproduceRequest, ReproduceResponse,
-    genetics_server::{Genetics, GeneticsServer},
-};
+use npc_maker::genetics::{self, Genetics};
 use npc_maker::individual::Individual;
 use std::{env, net::SocketAddr};
-use tonic::{Request, Response, Status, transport::Server};
 
 const DEFAULT_MUTATION_RATE: f64 = 0.01;
 const DEFAULT_DUPLICATIONS: usize = 9;
@@ -101,23 +97,19 @@ struct ArnGenetics {
     temperature: f64,
 }
 
-#[tonic::async_trait]
 impl Genetics for ArnGenetics {
-    async fn reproduce(&self, request: Request<ReproduceRequest>) -> Result<Response<ReproduceResponse>, Status> {
-        let request = request.into_inner();
-        let (mut child, genome) = if let Some(parent) = request.parents.into_iter().next() {
+    fn reproduce(&self, parents: Vec<Individual>) -> Result<Individual, String> {
+        let (mut child, genome) = if let Some(mut parent) = parents.into_iter().next() {
             if parent.metadata.is_none() {
-                return Err(Status::invalid_argument("first parent has no metadata"));
+                return Err("first parent has no metadata".to_string());
             }
             let genome_bytes = parent
                 .genome
                 .as_deref()
-                .ok_or_else(|| Status::invalid_argument("first parent has no genome"))?;
+                .ok_or_else(|| "first parent has no genome".to_string())?;
             let genome = Genome::from_bytes(genome_bytes)
-                .map_err(|error| Status::invalid_argument(format!("invalid parent genome: {error}")))?;
-            let mut parent = parent;
-            let mut parents = [&mut parent];
-            let child = Individual::reproduce(&mut parents);
+                .map_err(|error| format!("invalid parent genome: {error}"))?;
+            let child = Individual::reproduce(&mut [&mut parent]);
             (child, genome.reproduce(self.mutation_rate))
         } else {
             let genome = Genome::new(
@@ -132,8 +124,7 @@ impl Genetics for ArnGenetics {
 
         child.genome = Some(genome.to_bytes());
         child.phenome = Some(genome.phenome());
-
-        Ok(Response::new(ReproduceResponse { child: Some(child) }))
+        Ok(child)
     }
 }
 
@@ -158,13 +149,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         temperature: options.temperature,
     };
 
-    Server::builder()
-        .add_service(
-            GeneticsServer::new(service)
-                .max_encoding_message_size(8 * 1024 * 1024)
-                .max_decoding_message_size(8 * 1024 * 1024),
-        )
-        .serve(addr)
-        .await?;
+    genetics::serve(addr, service).await?;
     Ok(())
 }
