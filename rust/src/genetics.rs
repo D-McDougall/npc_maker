@@ -25,7 +25,7 @@ pub trait Genetics: Send + Sync + 'static {
     fn reproduce(&self, parents: Vec<Individual>) -> Result<Individual, String>;
 }
 
-/// Adapts the hand-written genetics API to the generated gRPC service.
+/// Adapts the user-facing genetics API to the generated gRPC service.
 struct GeneticsService<T> {
     genetics: T,
 }
@@ -48,8 +48,7 @@ impl<T: Genetics> genetics_server::Genetics for GeneticsService<T> {
 
 /// Run a genetics implementation as a gRPC server at the supplied address.
 ///
-/// The future completes when the server shuts down or returns a transport
-/// error. Message limits match the ARN example's existing configuration.
+/// The future completes when the server shuts down or returns a transport error.
 pub async fn serve<T: Genetics>(listen: SocketAddr, genetics: T) -> Result<(), tonic::transport::Error> {
     Server::builder()
         .add_service(
