@@ -30,10 +30,13 @@ class ExampleController(Controller):
         self.inputs.update(inputs)
 
     def get_outputs(self, ids):
-        return {
-            interface_id: self.inputs.get(interface_id, 0.0) + self.elapsed
-            for interface_id in ids
-        }
+        outputs = {}
+        for interface_id in ids:
+            value = self.inputs.get(interface_id, 0.0)
+            outputs[interface_id] = (
+                value + self.elapsed if isinstance(value, float) else value
+            )
+        return outputs
 
 
 def service(controller_type=ExampleController, *args, **kwargs):
