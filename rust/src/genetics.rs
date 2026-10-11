@@ -7,8 +7,8 @@ use std::net::SocketAddr;
 
 use tonic::{Request, Response, Status, transport::Server};
 
-use crate::individual::Individual;
 use crate::MAX_MESSAGE_SIZE;
+use crate::individual::Individual;
 
 tonic::include_proto!("genetics");
 
@@ -32,21 +32,11 @@ struct GeneticsService<T> {
 
 #[tonic::async_trait]
 impl<T: Genetics> genetics_server::Genetics for GeneticsService<T> {
-    async fn reproduce(
-        &self,
-        request: Request<ReproduceRequest>,
-    ) -> Result<Response<ReproduceResponse>, Status> {
+    async fn reproduce(&self, request: Request<ReproduceRequest>) -> Result<Response<ReproduceResponse>, Status> {
         let parents = request.into_inner().parents;
-        let child = self
-            .genetics
-            .reproduce(parents)
-            .map_err(Status::invalid_argument)?;
+        let child = self.genetics.reproduce(parents).map_err(Status::invalid_argument)?;
 
-        if child
-            .metadata
-            .as_ref()
-            .is_none_or(|metadata| metadata.name.is_empty())
-        {
+        if child.metadata.as_ref().is_none_or(|metadata| metadata.name.is_empty()) {
             return Err(Status::internal(
                 "reproduce() must return an Individual with a non-empty name",
             ));
@@ -60,10 +50,7 @@ impl<T: Genetics> genetics_server::Genetics for GeneticsService<T> {
 ///
 /// The future completes when the server shuts down or returns a transport
 /// error. Message limits match the ARN example's existing configuration.
-pub async fn serve<T: Genetics>(
-    listen: SocketAddr,
-    genetics: T,
-) -> Result<(), tonic::transport::Error> {
+pub async fn serve<T: Genetics>(listen: SocketAddr, genetics: T) -> Result<(), tonic::transport::Error> {
     Server::builder()
         .add_service(
             genetics_server::GeneticsServer::new(GeneticsService { genetics })

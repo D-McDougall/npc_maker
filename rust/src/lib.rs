@@ -7,8 +7,8 @@
 //! artificial-life experiment. The NPC Maker also includes a collection of
 //! ready-to-use tools and environments.
 
-pub mod individual;
 pub mod genetics;
+pub mod individual;
 
 pub mod evolution {
     tonic::include_proto!("evolution");
@@ -22,4 +22,4 @@ pub mod environment {
     tonic::include_proto!("environment");
 }
 
-const MAX_MESSAGE_SIZE: usize = 8 *1024*1024;
+const MAX_MESSAGE_SIZE: usize = 8 * 1024 * 1024;

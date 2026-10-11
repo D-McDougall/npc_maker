@@ -107,8 +107,7 @@ impl Genetics for ArnGenetics {
                 .genome
                 .as_deref()
                 .ok_or_else(|| "first parent has no genome".to_string())?;
-            let genome = Genome::from_bytes(genome_bytes)
-                .map_err(|error| format!("invalid parent genome: {error}"))?;
+            let genome = Genome::from_bytes(genome_bytes).map_err(|error| format!("invalid parent genome: {error}"))?;
             let child = Individual::reproduce(&mut [&mut parent]);
             (child, genome.reproduce(self.mutation_rate))
         } else {
