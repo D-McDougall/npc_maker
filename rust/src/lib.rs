@@ -20,3 +20,7 @@ pub mod genetics {
 pub mod controller {
     tonic::include_proto!("controller");
 }
+
+pub mod environment {
+    tonic::include_proto!("environment");
+}

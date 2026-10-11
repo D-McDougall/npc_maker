@@ -6,6 +6,7 @@
         "programs/npc-server",
         "examples/arn/controller",
         "examples/arn/genetics",
+        "examples/xor",
     ]
 
 [workspace.package]

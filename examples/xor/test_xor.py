@@ -62,14 +62,13 @@ def _free_port():
         return sock.getsockname()[1]
 
 
-def test_xor_smoke():
-    environment = Path(__file__).with_name("xor.py").resolve()
+def _run_xor_smoke(environment_command, label):
     controller = Path(__file__).resolve()
     server_script = "npc-server.py"
 
     config = {
-        "name": "XOR smoke test",
-        "environment": [sys.executable, str(environment)],
+        "name": f"XOR smoke test ({label})",
+        "environment": environment_command,
         "controller": [sys.executable, str(controller), "--controller"],
         "organisms": [{"body_type": "xor"}],
     }
@@ -122,6 +121,16 @@ def test_xor_smoke():
             except subprocess.TimeoutExpired:
                 server.terminate()
                 server.wait(timeout=5)
+
+
+def test_xor_smoke():
+    xor_dir = Path(__file__).resolve().parent
+    repo = xor_dir.parents[1]
+    python_environment = [sys.executable, str(xor_dir / "xor.py")]
+    rust_environment = [str(repo / "target" / "release" / "xor")]
+
+    _run_xor_smoke(python_environment, "python")
+    _run_xor_smoke(rust_environment, "rust")
 
 
 if __name__ == "__main__":

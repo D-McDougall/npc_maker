@@ -9,3 +9,6 @@
     npc_maker           = { path = "../../rust/" }
     serde               = { version = "1" }
     serde_json          = { version = "1" }
+    tokio               = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+    tokio-stream        = { version = "0.1" }
+    tonic               = { version = "0.14" }
