@@ -77,7 +77,8 @@ class Genetics(genetics_pb2_grpc.GeneticsServicer, ABC):
         if not isinstance(listen, str) or not listen:
             raise ValueError("listen must be a non-empty host:port address")
 
-        server = grpc.server(futures.ThreadPoolExecutor())
+        executor = futures.ThreadPoolExecutor()
+        server = grpc.server(executor)
         genetics_pb2_grpc.add_GeneticsServicer_to_server(
             cls(*args, **kwargs),
             server,
@@ -85,6 +86,7 @@ class Genetics(genetics_pb2_grpc.GeneticsServicer, ABC):
 
         # Zero indicates a bind failure; port 0 may request an ephemeral port.
         if server.add_insecure_port(listen) == 0:
+            executor.shutdown(wait=True)
             raise RuntimeError(f"could not bind genetics server to {listen!r}")
 
         try:
@@ -94,3 +96,4 @@ class Genetics(genetics_pb2_grpc.GeneticsServicer, ABC):
             pass
         finally:
             server.stop(0).wait()
+            executor.shutdown(wait=True)
