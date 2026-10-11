@@ -60,3 +60,90 @@ pub async fn serve<T: Genetics>(listen: SocketAddr, genetics: T) -> Result<(), t
         .serve(listen)
         .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
+    struct TestGenetics {
+        result: Result<Individual, String>,
+    }
+
+    impl Genetics for TestGenetics {
+        fn reproduce(&self, _parents: Vec<Individual>) -> Result<Individual, String> {
+            self.result.clone()
+        }
+    }
+
+    // The adapter's handler has no suspension points, so polling it once is
+    // enough for these focused unit tests without adding a runtime dependency.
+    fn run_ready<F: Future>(future: F) -> F::Output {
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let mut future = Box::pin(future);
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(output) => output,
+            Poll::Pending => panic!("test handler unexpectedly returned Pending"),
+        }
+    }
+
+    #[test]
+    fn reproduce_returns_child() {
+        let service = GeneticsService {
+            genetics: TestGenetics {
+                result: Ok(Individual::new()),
+            },
+        };
+
+        let response = run_ready(genetics_server::Genetics::reproduce(
+            &service,
+            Request::new(ReproduceRequest { parents: vec![] }),
+        ))
+        .unwrap()
+        .into_inner();
+
+        let child = response.child.expect("successful response should include a child");
+        assert!(!child.metadata().name.is_empty());
+    }
+
+    #[test]
+    fn reproduce_maps_algorithm_error_to_invalid_argument() {
+        let service = GeneticsService {
+            genetics: TestGenetics {
+                result: Err("invalid parent genome".to_string()),
+            },
+        };
+
+        let error = run_ready(genetics_server::Genetics::reproduce(
+            &service,
+            Request::new(ReproduceRequest { parents: vec![] }),
+        ))
+        .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert_eq!(error.message(), "invalid parent genome");
+    }
+
+    #[test]
+    fn reproduce_rejects_child_without_name() {
+        let service = GeneticsService {
+            genetics: TestGenetics {
+                result: Ok(Individual::default()),
+            },
+        };
+
+        let error = run_ready(genetics_server::Genetics::reproduce(
+            &service,
+            Request::new(ReproduceRequest { parents: vec![] }),
+        ))
+        .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::Internal);
+        assert_eq!(
+            error.message(),
+            "reproduce() must return an Individual with a non-empty name",
+        );
+    }
+}
