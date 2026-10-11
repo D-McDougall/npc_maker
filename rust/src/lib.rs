@@ -8,13 +8,10 @@
 //! ready-to-use tools and environments.
 
 pub mod individual;
+pub mod genetics;
 
 pub mod evolution {
     tonic::include_proto!("evolution");
-}
-
-pub mod genetics {
-    tonic::include_proto!("genetics");
 }
 
 pub mod controller {
