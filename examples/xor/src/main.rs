@@ -116,7 +116,11 @@ impl ControllerSession {
         let id = self
             .send(Command::GetOutputs(GetOutputsRequest { ids: vec![0] }))
             .await?;
-        let response = self.responses.recv().await.ok_or("controller session ended before returning outputs")?
+        let response = self
+            .responses
+            .recv()
+            .await
+            .ok_or("controller session ended before returning outputs")?
             .map_err(std::io::Error::other)?;
         if response.request_id != id {
             return Err("controller returned an out-of-order response".into());
@@ -199,7 +203,10 @@ fn start_controller(command: &[String]) -> Result<(Child, String), Box<dyn Error
 
 async fn run() -> Result<(), Box<dyn Error>> {
     let (listen, verbose) = arguments()?;
-    let mut environment = EnvironmentClient::connect(format!("http://{listen}")).await?;
+    let mut environment = EnvironmentClient::connect(format!("http://{listen}"))
+        .await?
+        .max_decoding_message_size(8 * 1024 * 1024)
+        .max_encoding_message_size(8 * 1024 * 1024);
     let mut active_command: Option<Vec<String>> = None;
     let mut process: Option<ControllerProcess> = None;
     let mut controller_address = String::new();

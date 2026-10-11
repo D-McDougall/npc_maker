@@ -32,6 +32,7 @@ from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import genetics_pb2, genetics_pb2_grpc
 from npc_maker.individual import Individual
 
+MAX_MESSAGE_SIZE = 8 * 1024 * 1024
 
 class LocalProcess:
     """
@@ -69,7 +70,12 @@ class ServiceProcess(LocalProcess):
         # Note: By convention services accept "--listen HOST:PORT".
         command = [*command, "--listen", f"{host}:{port}"]
         super().__init__(command, cwd)
-        self.channel = grpc.insecure_channel(f"{host}:{port}")
+        self.channel = grpc.insecure_channel(f"{host}:{port}",
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
+            ],
+        )
 
         # Block until the subprocess is ready to accept connections
         try:
@@ -174,7 +180,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
     def _fatal(self, error):
         self.failed = True
-        print(f"npc-server: downstream service failure: {error}", file=sys.stderr)
+        logging.fatal(f"npc-server: downstream service failure: {error}")
         if self.server is not None:
             self.server.stop(0)
 
@@ -436,7 +442,12 @@ def main():
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
         return 5
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
+        options=[
+            ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
+        ]
+    )
     environment_pb2_grpc.add_EnvironmentServicer_to_server(program, server)
     diagnostics_pb2_grpc.add_DiagnosticsServicer_to_server(
         DiagnosticsServer(program), server)

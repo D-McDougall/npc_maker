@@ -134,7 +134,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wrapper = EvolutionServerImpl(Mutex::new(program));
 
     Server::builder()
-        .add_service(EvolutionServer::new(wrapper))
+        .add_service(
+            EvolutionServer::new(wrapper)
+                .max_encoding_message_size(8 * 1024 * 1024)
+                .max_decoding_message_size(8 * 1024 * 1024),
+        )
         .serve(addr)
         .await?;
 

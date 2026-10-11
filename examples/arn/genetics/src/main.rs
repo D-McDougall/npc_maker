@@ -7,7 +7,7 @@ use npc_maker::individual::Individual;
 use std::{env, net::SocketAddr};
 use tonic::{Request, Response, Status, transport::Server};
 
-const DEFAULT_MUTATION_RATE: f64 = 0.001;
+const DEFAULT_MUTATION_RATE: f64 = 0.01;
 const DEFAULT_DUPLICATIONS: usize = 9;
 const DEFAULT_INPUTS: usize = 3;
 const DEFAULT_OUTPUTS: usize = 2;
@@ -159,7 +159,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     Server::builder()
-        .add_service(GeneticsServer::new(service))
+        .add_service(
+            GeneticsServer::new(service)
+                .max_encoding_message_size(8 * 1024 * 1024)
+                .max_decoding_message_size(8 * 1024 * 1024),
+        )
         .serve(addr)
         .await?;
     Ok(())

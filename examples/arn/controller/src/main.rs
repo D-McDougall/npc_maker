@@ -26,7 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let controller = ArnController::new(options.temperature.unwrap_or(DEFAULT_TEMPERATURE));
     Server::builder()
-        .add_service(ControllerServer::new(controller))
+        .add_service(
+            ControllerServer::new(controller)
+                .max_encoding_message_size(8 * 1024 * 1024)
+                .max_decoding_message_size(8 * 1024 * 1024),
+        )
         .serve(addr)
         .await?;
     Ok(())
