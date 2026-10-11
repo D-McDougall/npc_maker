@@ -126,6 +126,10 @@ class Controller(ABC):
             executor.shutdown(wait=True)
 
 
+class _SessionError(Exception):
+    """Internal exception used to carry a gRPC status out of dispatch."""
+
+
 class _ControllerService(controller_pb2_grpc.ControllerServicer):
     """Adapt a user-facing Controller class to the generated gRPC service."""
 
@@ -136,7 +140,9 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
 
     @staticmethod
     def _abort(context, code, details):
-        context.abort(code, details)
+        # Defer context.abort() until the exception handler so its exception
+        # cannot be caught and mistakenly remapped by the generic handler.
+        raise _SessionError((code, details))
 
     def Session(self, requests, context):
         controller = None
@@ -216,13 +222,15 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                         grpc.StatusCode.INVALID_ARGUMENT,
                         f"unknown command: {command}",
                     )
+            except _SessionError as error:
+                code, details = error.args[0]
+                context.abort(code, details)
             except ValueError as error:
-                self._abort(context, grpc.StatusCode.INVALID_ARGUMENT, str(error))
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
             except NotImplementedError as error:
-                self._abort(context, grpc.StatusCode.UNIMPLEMENTED, str(error))
+                context.abort(grpc.StatusCode.UNIMPLEMENTED, str(error))
             except Exception:
-                self._abort(
-                    context,
+                context.abort(
                     grpc.StatusCode.INTERNAL,
                     "controller session failed",
                 )
