@@ -21,3 +21,5 @@ pub mod controller {
 pub mod environment {
     tonic::include_proto!("environment");
 }
+
+const MAX_MESSAGE_SIZE: usize = 8 *1024*1024;

@@ -8,12 +8,9 @@ use std::net::SocketAddr;
 use tonic::{Request, Response, Status, transport::Server};
 
 use crate::individual::Individual;
+use crate::MAX_MESSAGE_SIZE;
 
-// Keep the generated protobuf and gRPC types at their existing public paths.
-mod proto {
-    tonic::include_proto!("genetics");
-}
-pub use proto::*;
+tonic::include_proto!("genetics");
 
 /// Implement the algorithm-specific part of a genetics service.
 ///
@@ -34,7 +31,7 @@ struct GeneticsService<T> {
 }
 
 #[tonic::async_trait]
-impl<T: Genetics> proto::genetics_server::Genetics for GeneticsService<T> {
+impl<T: Genetics> genetics_server::Genetics for GeneticsService<T> {
     async fn reproduce(
         &self,
         request: Request<ReproduceRequest>,
@@ -69,9 +66,9 @@ pub async fn serve<T: Genetics>(
 ) -> Result<(), tonic::transport::Error> {
     Server::builder()
         .add_service(
-            proto::genetics_server::GeneticsServer::new(GeneticsService { genetics })
-                .max_encoding_message_size(8 * 1024 * 1024)
-                .max_decoding_message_size(8 * 1024 * 1024),
+            genetics_server::GeneticsServer::new(GeneticsService { genetics })
+                .max_encoding_message_size(MAX_MESSAGE_SIZE)
+                .max_decoding_message_size(MAX_MESSAGE_SIZE),
         )
         .serve(listen)
         .await

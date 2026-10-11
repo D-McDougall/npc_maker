@@ -5,3 +5,5 @@ providing software interfaces that separate the components of an
 artificial-life experiment. The NPC Maker also includes a collection of
 ready-to-use tools and environments.
 """
+
+_MAX_MESSAGE_SIZE = 8 *1024 * 1024
