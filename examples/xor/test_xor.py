@@ -11,48 +11,40 @@ import subprocess
 import sys
 import tempfile
 import time
-from concurrent import futures
 from pathlib import Path
 
 import grpc
 
-from npc_maker import controller_pb2, controller_pb2_grpc
+from npc_maker.controller import Controller
 from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 
 
-class XorController(controller_pb2_grpc.ControllerServicer):
-    """
-    Minimal controller that returns a logical function of its two inputs.
-    """
-    def __init__(self, function="xor"):
-        self.function = function
+class XorController(Controller):
+    """Minimal controller that returns a logical function of its two inputs."""
 
-    def Session(self, requests, context):
-        inputs = [0.0, 0.0]
-        for request in requests:
-            command = request.WhichOneof("command")
-            if command == "reset":
-                inputs = [0.0, 0.0]
-            elif command == "set_inputs":
-                for value in request.set_inputs.inputs:
-                    if value.id < 2:
-                        inputs[value.id] = value.number
-            elif command == "get_outputs":
-                left, right = bool(inputs[0]), bool(inputs[1])
-                result = float({
-                    "xor": left != right,
-                    "and": left and right,
-                    "or": left or right,
-                    "nand": not (left and right),
-                    "nor": not (left or right),
-                    "eq": left == right,
-                }[self.function])
-                yield controller_pb2.ControllerResponse(
-                    request_id=request.request_id,
-                    outputs=[controller_pb2.IoValue(
-                        id=output_id, number=result)
-                        for output_id in request.get_outputs.ids],
-                )
+    def __init__(self, phenome: bytes, function="xor"):
+        self.function = function
+        self.inputs = {0: 0.0, 1: 0.0}
+
+    def reset(self):
+        self.inputs = {0: 0.0, 1: 0.0}
+
+    def set_inputs(self, inputs):
+        if any(interface_id >= 2 for interface_id in inputs.values()):
+            raise ValueError(f"invalid input interface ID (expected 0 or 1)")
+        self.inputs.update(inputs)
+
+    def get_outputs(self, ids):
+        left, right = bool(self.inputs[0]), bool(self.inputs[1])
+        result = float({
+            "xor": left != right,
+            "and": left and right,
+            "or": left or right,
+            "nand": not (left and right),
+            "nor": not (left or right),
+            "eq": left == right,
+        }[self.function])
+        return {output_id: result for output_id in ids}
 
 
 def _run_controller():
@@ -62,12 +54,7 @@ def _run_controller():
     parser.add_argument("function", nargs="?", default="xor",
                         choices=("xor", "and", "or", "nand", "nor", "eq"))
     args = parser.parse_args()
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    controller_pb2_grpc.add_ControllerServicer_to_server(
-        XorController(args.function), server)
-    server.add_insecure_port(args.listen)
-    server.start()
-    server.wait_for_termination()
+    XorController.main(args.listen, args.function)
 
 
 def _free_port():

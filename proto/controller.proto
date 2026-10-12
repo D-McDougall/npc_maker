@@ -12,10 +12,6 @@ send additional commands while earlier commands are still outstanding.
 Responses are correlated with requests by request_id.
 
 Servicers should accept many simultaneous sessions.
-
-A session-level failure terminates the session and kills the controller
-instance. A command-level error is returned as a response and does not,
-by itself, terminate the session.
 */
 service Controller {
   rpc Session(stream ControllerRequest)
