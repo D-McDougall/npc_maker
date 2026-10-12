@@ -1,0 +1,9 @@
+.git
+.pytest_cache
+build
+dist
+target
+venv
+python/npc_maker.egg-info
+__pycache__
+*.py[cod]

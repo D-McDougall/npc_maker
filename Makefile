@@ -6,7 +6,7 @@ PIP         := venv/bin/pip3
 PYTEST      := venv/bin/pytest
 export PATH := $(CURDIR)/venv/bin:$(PATH)
 
-.PHONY: all venv python rust-toolchain rust docs package install clean
+.PHONY: all venv python rust-toolchain rust docs package install docker clean
 
 all: package
 
@@ -57,9 +57,14 @@ install: package
 test: install
 	cargo test --workspace
 	$(PYTEST) python
-	# Whitelist the examples directory, since it contains untracked subdirectories.
+	# Whitelist examples, since it contains untracked subdirectories.
 	$(PYTEST) examples/nk
 	$(PYTEST) examples/arn
+
+docker:
+	docker build -f docker/npc-server.Dockerfile -t npc-server .
+	docker build -f docker/npc-evo.Dockerfile -t npc-evo .
+	docker build -f docker/npc-player.Dockerfile -t npc-player .
 
 clean:
 	rm -rf $(PYTHON_OUT)/*_pb2.py 	  	# protobuf
