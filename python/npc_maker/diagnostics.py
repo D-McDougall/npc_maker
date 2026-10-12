@@ -33,7 +33,7 @@ class Diagnostics:
     """
 
     def __init__(self, config, save_dir, verbose=False, listen=None, timeout=30,
-                 server_program="npc-server.py"):
+                 server_program="npc-server", workers=1):
         self.config = Path(config)
         self.save_dir = Path(save_dir)
         self.verbose = bool(verbose)
@@ -43,6 +43,8 @@ class Diagnostics:
         self.channel = grpc.insecure_channel(self.address)
 
         command = [server_program]
+        if workers > 1:
+            command.extend(["--workers", str(workers)])
         if self.verbose:
             command.append("--verbose")
         command.extend(["--listen", self.address, str(self.config),

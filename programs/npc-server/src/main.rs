@@ -94,7 +94,7 @@ struct State {
     counts: HashMap<(String, String), u64>,
     max_scores: HashMap<String, f64>,
     children: Vec<ChildProcess>,
-    environment: Option<ChildProcess>,
+    environments: Vec<ChildProcess>,
     listen: String,
     failed: bool,
 }
@@ -181,7 +181,7 @@ impl State {
             counts: HashMap::new(),
             max_scores: HashMap::new(),
             children,
-            environment: None,
+            environments: Vec::new(),
             listen: String::new(),
             failed: false,
         })
@@ -550,7 +550,7 @@ fn free_port() -> Result<u16, String> {
 }
 /// Keep the command-line usage string in one place for errors and --help.
 fn usage() -> &'static str {
-    "Usage: npc-server [-v|--verbose] [--listen HOST:PORT] CONFIG SAVE_DIR"
+    "Usage: npc-server [-v|--verbose] [--listen HOST:PORT] [--workers NUM] CONFIG SAVE_DIR"
 }
 
 #[tokio::main]
@@ -565,6 +565,7 @@ async fn main() {
 async fn run() -> Result<(), (i32, String)> {
     let mut verbose = false;
     let mut listen: Option<String> = None;
+    let mut workers = 1usize;
     let mut positional = Vec::new();
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -575,6 +576,14 @@ async fn run() -> Result<(), (i32, String)> {
                     args.next()
                         .ok_or((2, format!("expected address after --listen\n{}", usage())))?,
                 )
+            }
+            "--workers" => {
+                let value = args
+                    .next()
+                    .ok_or((2, format!("expected number after --workers\n{}", usage())))?;
+                workers = value
+                    .parse()
+                    .map_err(|_| (2, format!("invalid worker count \"{value}\"\n{}", usage())))?;
             }
             "-h" | "--help" => {
                 println!("{}", usage());
@@ -624,7 +633,7 @@ async fn run() -> Result<(), (i32, String)> {
         }
         let mut s = shutdown_shared.state.lock().await;
         s.failed = *shutdown_rx.borrow();
-        if let Some(mut env) = s.environment.take() {
+        for mut env in s.environments.drain(..).rev() {
             env.close();
         }
         for child in s.children.iter_mut().rev() {
@@ -649,9 +658,13 @@ async fn run() -> Result<(), (i32, String)> {
         // in configuration, passing it the address that it should connect to.
         let mut s = shared.state.lock().await;
         s.listen = bound.clone();
-        let mut command = s.config.environment.clone();
-        command.extend(["--listen".into(), bound.clone()]);
-        s.environment = Some(ChildProcess::start(&command, None).map_err(|e| (5, e))?);
+        for worker in 0..workers {
+            let mut command = s.config.environment.clone();
+            command.extend(["--listen".into(), bound.clone()]);
+            let child = ChildProcess::start(&command, None)
+                .map_err(|e| (5, format!("starting environment worker {}: {e}", worker + 1)))?;
+            s.environments.push(child);
+        }
     }
     eprintln!("INFO: Serving Environment and Diagnostics on {bound}");
     match server.await {
@@ -660,7 +673,7 @@ async fn run() -> Result<(), (i32, String)> {
         Err(e) => return Err((1, e.to_string())),
     }
     let mut s = shared.state.lock().await;
-    if let Some(mut child) = s.environment.take() {
+    for mut child in s.environments.drain(..).rev() {
         child.close();
     }
     for child in s.children.iter_mut().rev() {

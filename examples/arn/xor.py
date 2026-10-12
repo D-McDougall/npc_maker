@@ -59,7 +59,7 @@ def main():
         directory = Path(directory)
         config_path = directory / "experiment.json"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        with Diagnostics(config_path, directory / "server-data") as diagnostics:
+        with Diagnostics(config_path, directory / "server-data", server_program='npc-server', workers=20) as diagnostics:
             print(f"Starting npc-server on {diagnostics.address}", flush=True)
             started = time.monotonic()
             next_report = 0.0
