@@ -5,7 +5,7 @@
 //! for each incoming stream; the adapter owns protobuf validation, streaming,
 //! status conversion, and server configuration.
 
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, task::{Context, Poll, Waker}};
+use std::{net::SocketAddr, sync::Arc};
 
 use tonic::{Request, Response, Status, Streaming, transport::Server};
 use tokio_stream::wrappers::ReceiverStream;
@@ -96,7 +96,6 @@ impl<T: ControllerSession> controller_server::Controller for ControllerService<T
                     }
                 };
 
-                let request_id = request.request_id;
                 let result = process_request(&mut session, request, factory.as_ref());
                 match result {
                     Ok(Some(response)) => {
@@ -110,7 +109,6 @@ impl<T: ControllerSession> controller_server::Controller for ControllerService<T
                         break;
                     }
                 }
-                let _ = request_id;
             }
         });
 
@@ -221,12 +219,12 @@ mod tests {
     use super::*;
 
     #[derive(Debug)]
-    struct TestSession { phenome: Vec<u8>, value: f64 }
+    struct TestSession { value: f64 }
 
     impl TestSession {
         fn create(phenome: &[u8]) -> Result<Self, String> {
             if phenome == b"bad" { return Err("invalid phenome".into()); }
-            Ok(Self { phenome: phenome.to_vec(), value: 0.0 })
+            Ok(Self { value: 0.0 })
         }
     }
 
