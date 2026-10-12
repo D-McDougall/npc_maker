@@ -9,44 +9,14 @@ experiment runs until interrupted with Ctrl-C.
 
 import argparse
 import json
-import signal
-import socket
-import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 
-import grpc
-
-from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
+from npc_maker.diagnostics import Diagnostics
 
 
 BODY_TYPE = "xor"
-
-
-def _free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
-def _connect(address, process, timeout):
-    channel = grpc.insecure_channel(address)
-    ready = grpc.channel_ready_future(channel)
-    deadline = time.monotonic() + timeout
-    while True:
-        if process.poll() is not None:
-            channel.close()
-            raise RuntimeError(
-                f"npc-server exited during startup (status {process.returncode})")
-        try:
-            ready.result(timeout=0.25)
-            return channel
-        except grpc.FutureTimeoutError:
-            if time.monotonic() >= deadline:
-                channel.close()
-                raise RuntimeError("timed out waiting for npc-server")
 
 
 def main():
@@ -89,41 +59,21 @@ def main():
         directory = Path(directory)
         config_path = directory / "experiment.json"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        address = f"127.0.0.1:{_free_port()}"
-        print(f"Starting npc-server on {address}", flush=True)
-        server = subprocess.Popen([
-            "npc-server.py", "--listen", address,
-            str(config_path), str(directory / "server-data"),
-        ])
-        channel = None
-        try:
-            channel = _connect(address, server, 30)
-            diagnostics = diagnostics_pb2_grpc.DiagnosticsStub(channel)
-            organism = diagnostics_pb2.Organism(body_type=BODY_TYPE)
+        with Diagnostics(config_path, directory / "server-data") as diagnostics:
+            print(f"Starting npc-server on {diagnostics.address}", flush=True)
             started = time.monotonic()
             next_report = 0.0
-            while args.duration == 0 or time.monotonic() - started < args.duration:
-                if server.poll() is not None:
-                    raise RuntimeError(
-                        f"npc-server exited (status {server.returncode})")
-                deaths = diagnostics.DeathCount(organism).count
-                best = diagnostics.MaximumScore(organism).score
-                if time.monotonic() >= next_report:
-                    print(f"{deaths} evaluations, maximum score {best:.6f}", flush=True)
-                    next_report = time.monotonic() + 1.0
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            if channel is not None:
-                channel.close()
-            if server.poll() is None:
-                server.send_signal(signal.SIGINT)
             try:
-                server.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                server.terminate()
-                server.wait(timeout=5)
+                while (args.duration == 0 or
+                       time.monotonic() - started < args.duration):
+                    deaths = diagnostics.death_count(BODY_TYPE)
+                    best = diagnostics.maximum_score(BODY_TYPE)
+                    if time.monotonic() >= next_report:
+                        print(f"{deaths} evaluations, maximum score {best:.6f}", flush=True)
+                        next_report = time.monotonic() + 1.0
+                    time.sleep(0.1)
+            except KeyboardInterrupt:
+                pass
 
 
 if __name__ == "__main__":

@@ -12,18 +12,12 @@ Usage: test_nk.py [-n N] [-k K] [--seed SEED] [--death-limit COUNT] [--evolution
 
 import argparse
 import json
-import math
-import signal
-import socket
-import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-import grpc
-
-from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
+from npc_maker.diagnostics import Diagnostics
 
 N                  = 10
 K                  = 4
@@ -34,13 +28,6 @@ EVOLUTION          = "npc-evo -p 100 -s normalized=1".split()
 TIMEOUT            = 300.0  # Five minutes.
 POLL_INTERVAL      = 0.1
 STARTUP_TIMEOUT    = 30.0
-SHUTDOWN_TIMEOUT   = 3.0
-
-
-def _free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def _make_config(n, k, seed, evolution):
@@ -68,42 +55,15 @@ def _make_config(n, k, seed, evolution):
     }
 
 
-def _connect(address, server):
-    """Connect to Diagnostics, failing if the server exits or times out."""
-    channel = grpc.insecure_channel(address)
-    ready = grpc.channel_ready_future(channel)
-    deadline = time.monotonic() + STARTUP_TIMEOUT
-    while True:
-        if server.poll() is not None:
-            channel.close()
-            raise RuntimeError(
-                f"npc-server exited during startup (status {server.returncode})")
-        try:
-            ready.result(timeout=0.25)
-            return channel, diagnostics_pb2_grpc.DiagnosticsStub(channel)
-        except grpc.FutureTimeoutError:
-            if time.monotonic() > deadline:
-                channel.close()
-                raise RuntimeError("timed out waiting for npc-server to start")
-
-
-def _monitor(diagnostics, server, started, death_limit):
+def _monitor(diagnostics, started, death_limit):
     """
     Poll until death or limit are reached.
     """
-    organism = diagnostics_pb2.Organism(body_type=BODY_TYPE)
     last_report = 0.0
     score_report = []
     while True:
-        try:
-            deaths = diagnostics.DeathCount(organism).count
-            best = diagnostics.MaximumScore(organism).score
-        except grpc.RpcError as error:
-            time.sleep(0.25)
-            if server.poll() is not None:
-                raise RuntimeError(
-                    f"npc-server exited unexpectedly (status {server.returncode})")
-            raise RuntimeError(f"diagnostics request failed: {error.code().name}")
+        deaths = diagnostics.death_count(BODY_TYPE)
+        best = diagnostics.maximum_score(BODY_TYPE)
 
         score_report.append([deaths, best])
 
@@ -119,50 +79,9 @@ def _monitor(diagnostics, server, started, death_limit):
         if time.monotonic() - last_report >= 1.0:
             print(f"  {summary}", flush=True)
             last_report = time.monotonic()
-        if server.poll() is not None:
-            raise RuntimeError(
-                f"npc-server exited unexpectedly (status {server.returncode})")
         time.sleep(POLL_INTERVAL)
 
     return score_report
-
-
-def _shutdown(server):
-    """
-    Best-effort stop of npc-server using portable subprocess operations.
-    """
-    problems = []
-    if server.poll() is not None:
-        if server.returncode != 0:
-            problems.append(f"npc-server exited with status {server.returncode}")
-        return problems
-
-    # SIGINT gives npc-server a chance to shut down cleanly where supported.
-    try:
-        server.send_signal(signal.SIGINT)
-    except (OSError, ValueError):
-        pass
-    graceful = False
-    try:
-        server.wait(timeout=SHUTDOWN_TIMEOUT)
-        graceful = True
-    except subprocess.TimeoutExpired:
-        problems.append("npc-server did not exit after SIGINT")
-        try:
-            server.terminate()
-        except OSError:
-            pass
-        try:
-            server.wait(timeout=SHUTDOWN_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            try:
-                server.kill()
-                server.wait(timeout=SHUTDOWN_TIMEOUT)
-            except OSError:
-                problems.append("could not force-stop npc-server")
-    if graceful and server.returncode != 0:
-        problems.append(f"npc-server exited with status {server.returncode}")
-    return problems
 
 
 def run_nk(n=N, k=K, seed=SEED, death_limit=DEATH_LIMIT, evolution=EVOLUTION):
@@ -177,28 +96,11 @@ def run_nk(n=N, k=K, seed=SEED, death_limit=DEATH_LIMIT, evolution=EVOLUTION):
             encoding="utf-8",
         )
 
-        address = f"127.0.0.1:{_free_port()}"
-        print(f"Starting npc-server on {address}", flush=True)
-        server = subprocess.Popen(
-            [
-                "npc-server.py",
-                "--listen", address,
-                str(config_file),
-                str(directory / "server-data"),
-            ],
-        )
-
-        channel = None
-        try:
-            started = time.monotonic()
-            channel, diagnostics = _connect(address, server)
-            score_report = _monitor(diagnostics, server, started, death_limit)
-        finally:
-            if channel is not None:
-                channel.close()
-            problems = _shutdown(server)
-            if problems:
-                raise RuntimeError("unclean shutdown: " + ", ".join(problems))
+        started = time.monotonic()
+        with Diagnostics(config_file, directory / "server-data",
+                         timeout=STARTUP_TIMEOUT) as diagnostics:
+            print(f"Starting npc-server on {diagnostics.address}", flush=True)
+            score_report = _monitor(diagnostics, started, death_limit)
 
         return score_report
 
