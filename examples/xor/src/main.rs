@@ -142,19 +142,13 @@ async fn evaluate(controller: &mut ControllerSession, verbose: bool) -> Result<f
     for input_1 in [0.0, 1.0] {
         for input_2 in [0.0, 1.0] {
             controller.reset().await?;
-            let mut previous = None;
-            let mut answer = 0.0;
             for _ in 0..(TSTOP / DT).round() as usize {
                 controller.set_inputs(input_1, input_2).await?;
                 controller.advance(DT).await?;
-                answer = controller.get_output().await?;
-                if previous == Some(answer) {
-                    break;
-                }
-                previous = Some(answer);
             }
+            let answer = controller.get_output().await?;
+            let answer = answer.clamp(0.0, 1.0);
             let correct = if input_1 != input_2 { 1.0 } else { 0.0 };
-            answer = answer.clamp(0.0, 1.0);
             distance += (answer - correct).abs();
             if verbose {
                 println!("{input_1:.0} xor {input_2:.0} = {answer}");

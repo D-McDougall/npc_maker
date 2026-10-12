@@ -26,17 +26,12 @@ def evaluate(controller, verbose=False):
     for input_1 in (0, 1):
         for input_2 in (0, 1):
             controller.reset()
-            previous = None
-            answer = 0.0
             for _ in range(round(tstop / dt)):
                 controller.set_inputs((input_1, input_2))
                 controller.advance(dt)
-                answer = float(controller.get_output())
-                if answer == previous:
-                    break
-                previous = answer
-            correct = float(input_1 != input_2)
+            answer = float(controller.get_output())
             answer = max(0.0, min(1.0, answer))
+            correct = float(input_1 != input_2)
             distance += abs(answer - correct)
             if verbose:
                 print(f"{input_1} xor {input_2} = {answer}", flush=True)
