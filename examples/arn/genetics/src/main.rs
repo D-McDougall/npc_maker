@@ -98,21 +98,39 @@ struct ArnGenetics {
 }
 
 impl Genetics for ArnGenetics {
-    fn reproduce(&self, parents: Vec<Individual>) -> Result<Individual, String> {
-        let (mut child, genome) = if let Some(mut parent) = parents.into_iter().next() {
-            if parent.metadata.is_none() {
-                return Err("first parent has no metadata".to_string());
-            }
-            let genome_bytes = parent
-                .genome
-                .as_deref()
-                .ok_or_else(|| "first parent has no genome".to_string())?;
-            let genome = Genome::from_bytes(genome_bytes).map_err(|error| format!("invalid parent genome: {error}"))?;
-            let child = Individual::reproduce(&mut [&mut parent]);
-            (child, genome.reproduce(self.mutation_rate))
-        } else {
+    fn reproduce(&self, mut parents: Vec<Individual>) -> Result<Individual, String> {
+        let (mut child, genome) = if parents.is_empty() {
             let genome = Genome::new(self.duplications, 0.01, self.inputs, self.outputs, self.temperature);
             (Individual::new(), genome)
+        } else {
+            let parent_genomes = parents
+                .iter()
+                .enumerate()
+                .map(|(index, parent)| {
+                    let genome_bytes = parent
+                        .genome
+                        .as_deref()
+                        .ok_or_else(|| format!("parent {index} has no genome"))?;
+                    Genome::from_bytes(genome_bytes)
+                        .map_err(|error| format!("invalid genome for parent {index}: {error}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let gametes = parent_genomes
+                .iter()
+                .map(|genome| genome.gamete(self.mutation_rate))
+                .collect();
+            let first = &parent_genomes[0];
+            let genome = Genome::from_chromosomes(
+                gametes,
+                first.inputs().to_vec(),
+                first.outputs().to_vec(),
+                first.temperature(),
+            );
+
+            let mut parent_refs: Vec<&mut Individual> = parents.iter_mut().collect();
+            let child = Individual::reproduce(&mut parent_refs);
+            (child, genome)
         };
 
         child.genome = Some(genome.to_bytes());

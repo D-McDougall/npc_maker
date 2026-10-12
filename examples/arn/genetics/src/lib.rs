@@ -78,6 +78,9 @@
 //!
 //! Nodes are numbered with the genes first (in chromosome order), then the
 //! input sites, then the output sites.
+//!
+//! A genome can contain multiple homologous chromosomes. The genes from each
+//! chromosome are concatenated in chromosome order when building its phenome.
 
 use bitvec::prelude::*;
 use rand::distr::{Bernoulli, Distribution};
@@ -105,7 +108,7 @@ pub const WEIGHT_THRESHOLD: f64 = 1e-9;
 
 /// The raw genetic data. The explicit `u32` store keeps the serialized form the
 /// same on every platform, unlike the default `usize`.
-type Chromosome = BitVec<u32, Lsb0>;
+pub type Chromosome = BitVec<u32, Lsb0>;
 
 /// Length of the random seed which a chromosome is grown from, in bits.
 const SEED_BITS: usize = SITE_SIZE;
@@ -134,6 +137,41 @@ fn mutate<R: Rng + ?Sized>(chromosome: &mut Chromosome, rng: &mut R, rate: f64) 
             }
         }
     }
+}
+
+/// Create one chromosome by independently choosing each bit from one of the
+/// given homologous chromosomes, with equal probability for each chromosome.
+///
+/// # Panics
+///
+/// Panics if `chromosomes` is empty or if their lengths differ.
+pub fn crossover(chromosomes: &[Chromosome]) -> Chromosome {
+    crossover_with_rng(&mut rand::rng(), chromosomes)
+}
+
+/// Like [`crossover`], with an explicit source of randomness. Use a seeded
+/// generator for reproducible results.
+///
+/// Each output bit independently selects one input chromosome uniformly, so
+/// this is bit-wise crossover without linkage between neighboring bits.
+///
+/// # Panics
+///
+/// Panics if `chromosomes` is empty or if their lengths differ.
+pub fn crossover_with_rng<R: Rng + ?Sized>(
+    rng: &mut R,
+    chromosomes: &[Chromosome],
+) -> Chromosome {
+    assert!(!chromosomes.is_empty(), "crossover requires at least one chromosome");
+    let len = chromosomes[0].len();
+    assert!(
+        chromosomes.iter().all(|chromosome| chromosome.len() == len),
+        "crossover chromosomes must have equal lengths"
+    );
+
+    (0..len)
+        .map(|index| chromosomes[rng.random_range(0..chromosomes.len())][index])
+        .collect()
 }
 
 /// Grow a chromosome from `seed`: in each of `duplications` rounds, append a copy
@@ -174,8 +212,10 @@ pub struct Genome {
     /// Scaling factor for the network's rate of change, the `T` of the phenome.
     temperature: f64,
 
-    /// Raw genetic data. This is the only part which mutates.
-    chromosome: Chromosome,
+    /// Homologous copies of the raw genetic data. Every chromosome must be
+    /// homologous to every other chromosome in this genome. For now, asexual
+    /// reproduction mutates only the first chromosome.
+    chromosomes: Vec<Chromosome>,
 
     /// Binding sites for the input interfaces, inherited without mutation.
     inputs: Vec<Gene>,
@@ -246,15 +286,43 @@ impl Genome {
         let chromosome = grow(rng, seed, duplications, mutation_rate);
         Self {
             temperature,
-            chromosome,
+            chromosomes: vec![chromosome],
+            inputs,
+            outputs,
+        }
+    }
+
+    /// Create a genome from existing homologous chromosomes and I/O binding
+    /// sites. All chromosomes must be homologous copies of the same genetic
+    /// code. The first chromosome is used for asexual reproduction for now.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chromosomes` is empty or if `temperature` is not finite and
+    /// non-negative.
+    pub fn from_chromosomes(
+        chromosomes: Vec<Chromosome>,
+        inputs: Vec<Gene>,
+        outputs: Vec<Gene>,
+        temperature: f64,
+    ) -> Self {
+        assert!(!chromosomes.is_empty(), "a genome must contain a chromosome");
+        assert!(
+            temperature.is_finite() && temperature >= 0.0,
+            "temperature must be finite and non-negative, found {temperature}"
+        );
+        Self {
+            temperature,
+            chromosomes,
             inputs,
             outputs,
         }
     }
 
     /// Create a child by copying this genome and flipping each bit of the
-    /// chromosome independently, with probability `mutation_rate`. The I/O
-    /// binding sites and the temperature are inherited unchanged.
+    /// first chromosome independently, with probability `mutation_rate`. Other
+    /// homologs, the I/O binding sites, and the temperature are inherited
+    /// unchanged.
     ///
     /// # Panics
     ///
@@ -267,8 +335,24 @@ impl Genome {
     pub fn reproduce_with_rng<R: Rng + ?Sized>(&self, rng: &mut R, mutation_rate: f64) -> Self {
         assert_mutation_rate(mutation_rate);
         let mut child = self.clone();
-        mutate(&mut child.chromosome, rng, mutation_rate);
+        for chromosome in child.chromosomes.iter_mut() {
+            mutate(chromosome, rng, mutation_rate);
+        }
         child
+    }
+
+    /// Create a gamete by crossing over this genome's homologous chromosomes,
+    /// then mutating the resulting chromosome at `mutation_rate`.
+    pub fn gamete(&self, mutation_rate: f64) -> Chromosome {
+        self.gamete_with_rng(&mut rand::rng(), mutation_rate)
+    }
+
+    /// Like [`Genome::gamete`], with an explicit source of randomness.
+    pub fn gamete_with_rng<R: Rng + ?Sized>(&self, rng: &mut R, mutation_rate: f64) -> Chromosome {
+        assert_mutation_rate(mutation_rate);
+        let mut gamete = crossover_with_rng(rng, &self.chromosomes);
+        mutate(&mut gamete, rng, mutation_rate);
+        gamete
     }
 
     /// Build the phenome, in the JSON format of the `arn` controller.
@@ -277,7 +361,11 @@ impl Genome {
     /// number of nodes `N` is zero only if the chromosome has no genes and the
     /// genome has no I/O sites, which the controller will reject.
     pub fn phenome(&self) -> Vec<u8> {
-        let genes = Gene::find_all(&self.chromosome);
+        let genes: Vec<Gene> = self
+            .chromosomes
+            .iter()
+            .flat_map(|chromosome| Gene::find_all(chromosome))
+            .collect();
         let (n_genes, n_inputs) = (genes.len(), self.inputs.len());
         let n = n_genes + n_inputs + self.outputs.len();
         let nodes: Vec<&Gene> = genes.iter().chain(&self.inputs).chain(&self.outputs).collect();
@@ -334,10 +422,6 @@ impl Genome {
             I: (n_genes..n_genes + n_inputs).map(|node| vec![node]).collect(),
             O: (n_genes + n_inputs..n).map(|node| vec![node]).collect(),
         };
-        eprintln!(
-            "# genes {n} | {:.2} % sparsity",
-            100.0 * phenome.W.len() as f64 / (n * n) as f64
-        );
         serde_json::to_vec(&phenome).expect("phenome is always serializable")
     }
 
@@ -358,9 +442,9 @@ impl Genome {
         Ok(genome)
     }
 
-    /// The raw genetic data.
-    pub fn chromosome(&self) -> &BitSlice<u32, Lsb0> {
-        &self.chromosome
+    /// All homologous chromosomes in this genome.
+    pub fn chromosomes(&self) -> &[BitVec<u32, Lsb0>] {
+        &self.chromosomes
     }
 
     /// Binding sites of the input interfaces.
@@ -378,9 +462,9 @@ impl Genome {
         self.temperature
     }
 
-    /// Number of genes in the chromosome.
+    /// Total number of genes across all chromosomes.
     pub fn num_genes(&self) -> usize {
-        Gene::find_all(&self.chromosome).len()
+        self.chromosomes.iter().map(|c| Gene::find_all(c).len()).sum()
     }
 }
 
@@ -581,7 +665,7 @@ mod tests {
         // The smallest genome is just the seed, which is too short to hold a gene.
         let genome = Genome::new(0, 0.0, 1, 1, 1.0);
         assert_eq!(genome.num_genes(), 0);
-        assert_eq!(genome.chromosome().len(), SEED_BITS);
+        assert_eq!(genome.chromosomes[0].len(), SEED_BITS);
     }
 
     #[test]
@@ -694,14 +778,14 @@ mod tests {
     fn grown_chromosomes_have_the_requested_length() {
         for duplications in 0..=10 {
             let genome = Genome::new_with_rng(&mut rng(), duplications, 0.3, 1, 1, 1.0);
-            assert_eq!(genome.chromosome().len(), SEED_BITS << duplications, "{duplications}");
+            assert_eq!(genome.chromosomes[0].len(), SEED_BITS << duplications, "{duplications}");
         }
     }
 
     #[test]
     fn without_mutation_the_chromosome_is_the_seed_repeated() {
         let genome = Genome::new_with_rng(&mut rng(), 7, 0.0, 0, 0, 1.0);
-        let chromosome = genome.chromosome();
+        let chromosome = &genome.chromosomes[0];
         assert_eq!(chromosome.len(), 4096);
         // The seed is the first word drawn from the generator.
         let seed: u32 = rng().random();
@@ -717,7 +801,7 @@ mod tests {
         for duplications in 0..8 {
             let genome = Genome::new_with_rng(&mut rng(), duplications, 1.0, 0, 0, 1.0);
             let expected = if duplications % 2 == 0 { seed } else { !seed };
-            let chromosome = genome.chromosome();
+            let chromosome = &genome.chromosomes[0];
             assert_eq!(chromosome.len(), SEED_BITS << duplications);
             assert!(
                 chromosome
@@ -735,7 +819,7 @@ mod tests {
         // the new copy would make it differ with probability p.
         let rate = 0.05;
         let genome = Genome::new_with_rng(&mut rng(), 12, rate, 0, 0, 1.0);
-        let (a, b) = genome.chromosome().split_at(SEED_BITS << 11);
+        let (a, b) = genome.chromosomes[0].split_at(SEED_BITS << 11);
         let differing = (a.iter().by_vals())
             .zip(b.iter().by_vals())
             .filter(|(x, y)| x != y)
@@ -821,7 +905,7 @@ mod tests {
         let parent = Genome::new_with_rng(&mut rng(), 7, 0.01, 3, 2, 0.5);
         assert_eq!(parent.reproduce_with_rng(&mut rng(), 0.0), parent);
         let flipped = parent.reproduce_with_rng(&mut rng(), 1.0);
-        assert_eq!(flipped.chromosome, !parent.chromosome.clone());
+        assert_eq!(flipped.chromosomes[0], !parent.chromosomes[0].clone());
         assert_eq!((&flipped.inputs, &flipped.outputs), (&parent.inputs, &parent.outputs));
     }
 
@@ -829,13 +913,13 @@ mod tests {
     fn reproduce_flips_about_the_requested_fraction_of_bits() {
         let parent = Genome::new_with_rng(&mut rng(), 9, 0.01, 1, 1, 1.0);
         let child = parent.reproduce_with_rng(&mut rng(), 0.05);
-        let changed = (parent.chromosome.iter().by_vals())
-            .zip(child.chromosome.iter().by_vals())
+        let changed = (parent.chromosomes[0].iter().by_vals())
+            .zip(child.chromosomes[0].iter().by_vals())
             .filter(|(a, b)| a != b)
             .count();
         // Expect 819 changes, with a standard deviation of 28.
         assert!((490..=1150).contains(&changed), "{changed} bits changed");
-        assert_eq!(child.chromosome.len(), parent.chromosome.len());
+        assert_eq!(child.chromosomes[0].len(), parent.chromosomes[0].len());
     }
 
     #[test]
