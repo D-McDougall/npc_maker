@@ -6,7 +6,7 @@ use npc_maker::controller::{
     SetInputsRequest, controller_client::ControllerClient, controller_request::Command,
     io_value::Value, serve as serve_controller,
 };
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Code, Streaming};
@@ -29,9 +29,24 @@ async fn serve_with(controller: ArnController) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);
+
     tokio::spawn(async move {
         serve_controller(address, controller.into_controller()).await.unwrap();
     });
+
+    // `serve` binds its own listener, so spawning it is not by itself a
+    // readiness guarantee. Wait until the port accepts TCP connections before
+    // allowing clients to connect.
+    loop {
+        match TcpStream::connect(address).await {
+            Ok(stream) => {
+                drop(stream);
+                break;
+            }
+            Err(_) => tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+        }
+    }
+
     format!("http://{address}")
 }
 
@@ -188,7 +203,7 @@ async fn initializing_twice_ends_the_session() {
     client.initialize(PHENOME).await;
     client.initialize(PHENOME).await;
     let status = client.responses.message().await.unwrap_err();
-    assert_eq!(status.code(), Code::FailedPrecondition);
+    assert_eq!(status.code(), Code::InvalidArgument);
 }
 
 #[tokio::test]
@@ -200,7 +215,7 @@ async fn initializing_twice_does_not_disturb_other_sessions() {
     bad.initialize(PHENOME).await;
     bad.initialize(PHENOME).await;
     let status = bad.responses.message().await.unwrap_err();
-    assert_eq!(status.code(), Code::FailedPrecondition);
+    assert_eq!(status.code(), Code::InvalidArgument);
     // A session which initialized only once carries on as normal.
     good.set_input(0, 1.0).await;
     good.advance(1.0).await;
