@@ -1,15 +1,22 @@
 """
-Base API for implementing NPC Maker controllers.
+Base API for making and using NPC Maker controllers.
 
-Subclasses construct a controller session from its phenome. The gRPC
-adapter (`npc_maker.controller.Controller` base class) owns the streaming
-protocol, converts typed Python I/O values to and from protobuf messages, and
-creates one controller instance for each session.
+# To implement a new Controller:
+
+Subclasses the ControllerServer, which accepts the phenome as an argument to its
+constructor. Then call `main()` the main function, which starts a listen
+server, and creates one controller instance for each incomming session.
 """
 
 from abc import ABC, abstractmethod
+import atexit
 from collections.abc import Mapping
 from concurrent import futures
+import queue
+import socket
+import subprocess
+import threading
+import time
 from math import isfinite
 from numbers import Real
 
@@ -18,10 +25,193 @@ import grpc
 from . import controller_pb2, controller_pb2_grpc
 from . import MAX_MESSAGE_SIZE
 
-__all__ = ("Controller",)
+__all__ = ("ControllerServer", "ControllerClient")
 
 IoValueType = float | str | bytes
 IoValues = Mapping[int, IoValueType]
+
+
+class ControllerClient:
+    """Environment-side wrapper for one streaming controller session.
+
+    The controller process and its gRPC connection are reused for every
+    client created with the same CLI invocation. Each client owns an
+    independent streaming session and phenome.
+    """
+
+    _connections = {}
+    _connections_lock = threading.Lock()
+    _cleanup_registered = False
+
+    def __init__(self, command, phenome: bytes):
+        self._connection = self._get_connection(command)
+        self._requests = queue.Queue()
+        self._responses = {}
+        self._condition = threading.Condition()
+        self._request_id = 0
+        self._closed = False
+        self._error = None
+
+        def request_stream():
+            while True:
+                request = self._requests.get()
+                if request is None:
+                    return
+                yield request
+
+        self._call = self._connection.stub.Session(request_stream())
+        self._reader = threading.Thread(target=self._read_responses, daemon=True)
+        self._reader.start()
+        self._send("initialize", controller_pb2.InitializeRequest(phenome=phenome))
+
+    @classmethod
+    def _get_connection(cls, command):
+        if isinstance(command, (str, bytes)):
+            raise TypeError("controller command must be a sequence of CLI arguments")
+        command = tuple(command)
+        if not command or any(not isinstance(argument, str) for argument in command):
+            raise ValueError("controller command must contain CLI argument strings")
+
+        with cls._connections_lock:
+            connection = cls._connections.get(command)
+            if connection is not None and connection.process.poll() is None:
+                return connection
+            # Check for dead controller processes
+            if connection is not None:
+                connection.close()
+                del cls._connections[command]
+            connection = _ControllerConnection(command)
+            cls._connections[command] = connection
+            if not cls._cleanup_registered:
+                atexit.register(cls._close_connections)
+                cls._cleanup_registered = True
+            return connection
+
+    @classmethod
+    def _close_connections(cls):
+        with cls._connections_lock:
+            for connection in cls._connections.values():
+                connection.close()
+            cls._connections.clear()
+
+    def _send(self, command: str, value) -> int:
+        with self._condition:
+            if self._closed:
+                raise RuntimeError("controller session is closed")
+            if self._error is not None:
+                raise self._error
+            request_id = self._request_id
+            self._request_id += 1
+            self._requests.put(controller_pb2.ControllerRequest(
+                request_id=request_id, **{command: value}))
+        return request_id
+
+    def _read_responses(self):
+        try:
+            for response in self._call:
+                with self._condition:
+                    self._responses[response.request_id] = response
+                    self._condition.notify_all()
+        except grpc.RpcError as error:
+            with self._condition:
+                self._error = error
+                self._condition.notify_all()
+        else:
+            with self._condition:
+                if not self._closed and self._error is None:
+                    self._error = RuntimeError("controller session ended")
+                self._condition.notify_all()
+
+    def reset(self) -> None:
+        self._send("reset", controller_pb2.ResetRequest())
+
+    def set_inputs(self, values) -> None:
+        inputs = [controller_pb2.IoValue(id=i, number=value)
+                  for i, value in enumerate(values)]
+        self._send("set_inputs", controller_pb2.SetInputsRequest(inputs=inputs))
+
+    def advance(self, interval: float) -> None:
+        self._send("advance", controller_pb2.AdvanceRequest(dt=interval))
+
+    def get_outputs(self, ids):
+        request_id = self._send(
+            "get_outputs", controller_pb2.GetOutputsRequest(ids=list(ids)))
+        with self._condition:
+            while request_id not in self._responses:
+                if self._error is not None:
+                    raise self._error
+                if self._closed:
+                    raise RuntimeError("controller session closed before response")
+                self._condition.wait()
+            response = self._responses.pop(request_id)
+            return {output.id: _python_value(output)
+                    for output in response.outputs}
+
+    def get_output(self, output_id: int = 0) -> IoValueType:
+        outputs = self.get_outputs([output_id])
+        if output_id in outputs:
+            return outputs[output_id]
+        raise RuntimeError(f"controller did not return output {output_id}")
+
+    def close(self) -> None:
+        with self._condition:
+            if self._closed:
+                return
+            self._closed = True
+            self._condition.notify_all()
+        self._requests.put(None)
+        self._call.cancel()
+        if threading.current_thread() is not self._reader:
+            self._reader.join(timeout=1)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+class _ControllerConnection:
+    """Process, channel, and stub cached for a controller CLI invocation."""
+
+    def __init__(self, command):
+        address = f"127.0.0.1:{_free_port()}"
+        self.process = subprocess.Popen([*command, "--listen", address])
+        self.channel = grpc.insecure_channel(address)
+        ready = grpc.channel_ready_future(self.channel)
+        deadline = time.monotonic() + 30
+        try:
+            while True:
+                if self.process.poll() is not None:
+                    raise RuntimeError(
+                        "controller exited during startup "
+                        f"(status {self.process.returncode})")
+                try:
+                    ready.result(timeout=0.25)
+                    self.stub = controller_pb2_grpc.ControllerStub(self.channel)
+                    return
+                except grpc.FutureTimeoutError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("timed out waiting for controller")
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        self.channel.close()
+        if self.process.poll() is None:
+            self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+
+
+def _free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def _valid_id(value: object) -> bool:
@@ -60,7 +250,7 @@ def _protobuf_value(interface_id: int, value: object) -> controller_pb2.IoValue:
     )
 
 
-class Controller(ABC):
+class ControllerServer(ABC):
     """Base class for a single NPC Maker controller session.
 
     The server constructs a fresh subclass instance for every session, passing
@@ -75,7 +265,7 @@ class Controller(ABC):
         Construct controller state from genetic material (the phenome).
 
         This also receives the *args and **kwargs that were given to the
-        `Controller.main()` class-method.
+        `ControllerServer.main()` class-method.
         """
         raise NotImplementedError
 
@@ -140,7 +330,7 @@ class _SessionError(Exception):
 
 
 class _ControllerService(controller_pb2_grpc.ControllerServicer):
-    """Adapt a user-facing Controller class to the generated gRPC service."""
+    """Adapt a user-facing ControllerServer class to the generated gRPC service."""
 
     def __init__(self, controller_type, args, kwargs):
         self._controller_type = controller_type

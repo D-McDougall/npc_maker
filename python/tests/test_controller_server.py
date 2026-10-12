@@ -2,7 +2,7 @@ import grpc
 import pytest
 
 from npc_maker import controller_pb2
-from npc_maker.controller import Controller, _ControllerService
+from npc_maker.controller import ControllerServer, _ControllerService
 
 
 class AbortError(Exception):
@@ -17,7 +17,7 @@ class Context:
         raise AbortError(code, details)
 
 
-class ExampleController(Controller):
+class ExampleController(ControllerServer):
     def __init__(self, phenome):
         self.phenome = phenome
         self.inputs = {}
