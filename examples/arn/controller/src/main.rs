@@ -1,5 +1,5 @@
-use arn_controller::{Cli, DEFAULT_TEMPERATURE, Session, parse_args};
-use npc_maker::controller::{Controller, ControllerRequest, InitializeRequest, controller_request::Command, serve};
+use arn_controller::{ArnController, Cli, DEFAULT_TEMPERATURE, parse_args};
+use npc_maker::controller::serve;
 use std::net::SocketAddr;
 
 #[tokio::main]
@@ -23,15 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         std::process::exit(3);
     });
-    let temperature = options.temperature.unwrap_or(DEFAULT_TEMPERATURE);
-    let controller = Controller::new(move |phenome: &[u8]| {
-        let mut session = Session::new(temperature);
-        session.handle(ControllerRequest {
-            request_id: 0,
-            command: Some(Command::Initialize(InitializeRequest { phenome: phenome.to_vec() })),
-        }).map_err(|status| status.message().to_string())?;
-        Ok(session)
-    });
+    let controller = ArnController::new(options.temperature.unwrap_or(DEFAULT_TEMPERATURE)).into_controller();
     serve(addr, controller).await?;
     Ok(())
 }
