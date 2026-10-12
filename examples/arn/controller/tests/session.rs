@@ -4,12 +4,12 @@ use arn_controller::ArnController;
 use npc_maker::controller::{
     AdvanceRequest, ControllerRequest, ControllerResponse, GetOutputsRequest, InitializeRequest, IoValue,
     SetInputsRequest, controller_client::ControllerClient, controller_request::Command,
-    controller_server::ControllerServer, io_value::Value,
+    io_value::Value, serve as serve_controller,
 };
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
-use tonic::{Code, Streaming, transport::Server};
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{Code, Streaming};
 
 const EPSILON: f64 = 1e-12;
 
@@ -28,11 +28,10 @@ async fn serve() -> String {
 async fn serve_with(controller: ArnController) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(
-        Server::builder()
-            .add_service(ControllerServer::new(controller))
-            .serve_with_incoming(TcpListenerStream::new(listener)),
-    );
+    drop(listener);
+    tokio::spawn(async move {
+        serve_controller(address, controller.into_controller()).await.unwrap();
+    });
     format!("http://{address}")
 }
 
@@ -179,7 +178,7 @@ async fn command_before_initialize_ends_the_session() {
     let mut client = Client::connect(&url).await;
     client.advance(1.0).await;
     let status = client.responses.message().await.unwrap_err();
-    assert_eq!(status.code(), Code::FailedPrecondition);
+    assert_eq!(status.code(), Code::InvalidArgument);
 }
 
 #[tokio::test]
