@@ -29,4 +29,4 @@ pub mod experiment {
     tonic::include_proto!("experiment.serde");
 }
 
-pub const MAX_MESSAGE_SIZE: usize = 20 * 1024 * 1024;
+pub const MAX_MESSAGE_SIZE: usize = 1024 * 1024 * 1024;
