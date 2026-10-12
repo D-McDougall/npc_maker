@@ -9,8 +9,8 @@
 
 use ndarray::{Array1, Array2};
 use npc_maker::controller::{
-    Controller, ControllerSession, ControllerRequest, ControllerResponse, IoValue,
-    controller_request::Command, io_value::Value,
+    Controller, ControllerRequest, ControllerResponse, ControllerSession, IoValue, controller_request::Command,
+    io_value::Value,
 };
 use serde::Deserialize;
 use tonic::Status;

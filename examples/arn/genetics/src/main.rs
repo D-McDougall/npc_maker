@@ -111,13 +111,7 @@ impl Genetics for ArnGenetics {
             let child = Individual::reproduce(&mut [&mut parent]);
             (child, genome.reproduce(self.mutation_rate))
         } else {
-            let genome = Genome::new(
-                self.duplications,
-                0.01,
-                self.inputs,
-                self.outputs,
-                self.temperature,
-            );
+            let genome = Genome::new(self.duplications, 0.01, self.inputs, self.outputs, self.temperature);
             (Individual::new(), genome)
         };
 
