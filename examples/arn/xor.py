@@ -45,11 +45,11 @@ def main():
         "name": "XOR with the ARN controller",
         # "environment": [sys.executable, str(repo / "examples" / "xor" / "xor.py")],
         "environment": [str(repo / "target" / "release" / "xor")],
-        "evolution": "npc-evo -p 10 -r oldest -s normalized=1".split(),
+        "evolution": "npc-evo -p 1000 -r oldest -s ranked-exponential=100 --parents 2".split(),
         "organisms": [{
             "body_type": BODY_TYPE,
             "genetics": [str(genetics), "--inputs", "2", "--outputs", "1",
-                         "--duplications", "12",
+                         "--duplications", "10",
                          "--temperature", str(args.temperature)],
             "controller": [str(controller), "--temperature", str(args.temperature)],
         }],
