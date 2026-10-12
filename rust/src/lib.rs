@@ -7,15 +7,12 @@
 //! artificial-life experiment. The NPC Maker also includes a collection of
 //! ready-to-use tools and environments.
 
+pub mod controller;
 pub mod genetics;
 pub mod individual;
 
 pub mod evolution {
     tonic::include_proto!("evolution");
-}
-
-pub mod controller {
-    tonic::include_proto!("controller");
 }
 
 pub mod environment {

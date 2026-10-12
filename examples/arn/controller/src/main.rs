@@ -1,7 +1,6 @@
 use arn_controller::{ArnController, Cli, DEFAULT_TEMPERATURE, parse_args};
-use npc_maker::controller::controller_server::ControllerServer;
+use npc_maker::controller::serve;
 use std::net::SocketAddr;
-use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,14 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         std::process::exit(3);
     });
-    let controller = ArnController::new(options.temperature.unwrap_or(DEFAULT_TEMPERATURE));
-    Server::builder()
-        .add_service(
-            ControllerServer::new(controller)
-                .max_encoding_message_size(8 * 1024 * 1024)
-                .max_decoding_message_size(8 * 1024 * 1024),
-        )
-        .serve(addr)
-        .await?;
+    let controller = ArnController::new(options.temperature.unwrap_or(DEFAULT_TEMPERATURE)).into_controller();
+    serve(addr, controller).await?;
     Ok(())
 }

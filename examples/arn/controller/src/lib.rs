@@ -9,13 +9,11 @@
 
 use ndarray::{Array1, Array2};
 use npc_maker::controller::{
-    ControllerRequest, ControllerResponse, IoValue, controller_request::Command, controller_server::Controller,
-    io_value::Value,
+    Controller, ControllerSession, ControllerRequest, ControllerResponse, IoValue,
+    controller_request::Command, io_value::Value,
 };
 use serde::Deserialize;
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Request, Response, Status, Streaming};
+use tonic::Status;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -310,38 +308,35 @@ impl Default for ArnController {
     }
 }
 
-#[tonic::async_trait]
-impl Controller for ArnController {
-    type SessionStream = ReceiverStream<Result<ControllerResponse, Status>>;
-
-    async fn session(
-        &self,
-        request: Request<Streaming<ControllerRequest>>,
-    ) -> Result<Response<Self::SessionStream>, Status> {
-        let mut inbound = request.into_inner();
-        let (outbound, receiver) = mpsc::channel(16);
+impl ArnController {
+    /// Build the shared server API using this configuration.
+    pub fn into_controller(self) -> Controller<Session> {
         let temperature = self.temperature;
-        tokio::spawn(async move {
-            let mut session = Session::new(temperature);
-            // Commands are processed sequentially, in the order received.
-            // The loop ends when the environment closes the stream, when the
-            // connection fails, or on the first session-level error.
-            while let Ok(Some(request)) = inbound.message().await {
-                match session.handle(request) {
-                    Ok(None) => {}
-                    Ok(Some(response)) => {
-                        if outbound.send(Ok(response)).await.is_err() {
-                            break; // Environment hung up
-                        }
-                    }
-                    Err(status) => {
-                        let _ = outbound.send(Err(status)).await;
-                        break;
-                    }
-                }
-            }
-        });
-        Ok(Response::new(ReceiverStream::new(receiver)))
+        Controller::new(move |phenome: &[u8]| {
+            let network = RegulatoryNetwork::from_phenome(phenome, temperature)
+                .map_err(|status| status.message().to_string())?;
+            Ok(Session { temperature, network: Some(network) })
+        })
+    }
+}
+
+impl ControllerSession for Session {
+    fn reset(&mut self) -> Result<(), String> {
+        let network = self.network.as_mut().ok_or_else(|| "controller is not initialized".to_string())?;
+        network.reset();
+        Ok(())
+    }
+
+    fn advance(&mut self, dt: f64) -> Result<(), String> {
+        self.network().map_err(|status| status.message().to_string())?.advance(dt).map_err(|status| status.message().to_string())
+    }
+
+    fn set_inputs(&mut self, inputs: &[IoValue]) -> Result<(), String> {
+        self.network().map_err(|status| status.message().to_string())?.set_inputs(inputs).map_err(|status| status.message().to_string())
+    }
+
+    fn get_outputs(&mut self, ids: &[u64]) -> Result<Vec<IoValue>, String> {
+        self.network().map_err(|status| status.message().to_string())?.get_outputs(ids).map_err(|status| status.message().to_string())
     }
 }
 
