@@ -11,28 +11,20 @@ which must result in a successful exit status.
 """
 
 import json
-import signal
-import socket
-import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-import grpc
-
-from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
+from npc_maker.diagnostics import Diagnostics
 from npc_maker.individual import Individual
-
-
-def _free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def test_npc_server_py():
     server_test_inner("npc-server.py")
+
+def test_npc_server():
+    server_test_inner("npc-server")
 
 
 def server_test_inner(server_program):
@@ -71,21 +63,20 @@ def server_test_inner(server_program):
         config_file = directory / "experiment.json"
         config_file.write_text(json.dumps(config), encoding="utf-8")
 
-        address = f"127.0.0.1:{_free_port()}"
-        process = subprocess.Popen([
-            server_program,
-            "--verbose",
-            "--listen", address,
-            str(config_file), str(directory / "server-data"),
-        ])
-
-        try:
+        with Diagnostics(
+            config_file,
+            directory / "server-data",
+            verbose=True,
+            server_program=server_program,
+            timeout=30,
+        ) as diagnostics:
             # Wait for the environment to finish its checks.
             deadline = time.monotonic() + 120
             while not result_file.exists():
-                if process.poll() is not None:
+                if diagnostics.process.poll() is not None:
                     raise AssertionError(
-                        f"npc-server exited unexpectedly with status {process.returncode}")
+                        "npc-server exited unexpectedly with status "
+                        f"{diagnostics.process.returncode}")
                 if time.monotonic() > deadline:
                     raise AssertionError("timed out waiting for the environment")
                 time.sleep(0.1)
@@ -99,31 +90,19 @@ def server_test_inner(server_program):
             assert result["max_score"] is not None
 
             # The server should have survived the environment.
-            assert process.poll() is None, (
-                f"npc-server exited with status {process.returncode}")
+            assert diagnostics.process.poll() is None, (
+                f"npc-server exited with status {diagnostics.process.returncode}")
 
             # The server must be serving on the address it was given, and what
             # it reports must still agree with what the environment did.
-            organism = diagnostics_pb2.Organism(body_type="test")
-            with grpc.insecure_channel(address) as channel:
-                diagnostics = diagnostics_pb2_grpc.DiagnosticsStub(channel)
-                assert diagnostics.SpawnCount(organism).count == counts["Spawn"]
-                assert diagnostics.DeathCount(organism).count == counts["Death"]
-                assert diagnostics.LivingCount(organism).count == result["living"]
-                assert diagnostics.MaximumScore(organism).score == result["max_score"]
+            assert diagnostics.spawn_count("test") == counts["Spawn"]
+            assert diagnostics.death_count("test") == counts["Death"]
+            assert diagnostics.living_count("test") == result["living"]
+            assert diagnostics.maximum_score("test") == result["max_score"]
 
-            # SIGINT is the clean way to stop the server.
-            process.send_signal(signal.SIGINT)
-            assert process.wait(timeout=30) == 0, (
-                f"npc-server exited with status {process.returncode}")
-        finally:
-            if process.poll() is None:
-                process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        # Exiting the context sends SIGINT and reaps the server.
+        assert diagnostics.process.returncode == 0, (
+            f"npc-server exited with status {diagnostics.process.returncode}")
 
 
 if __name__ == "__main__":

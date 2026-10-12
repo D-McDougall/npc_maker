@@ -32,7 +32,8 @@ class Diagnostics:
     reaped when the context exits.
     """
 
-    def __init__(self, config, save_dir, verbose=False, listen=None, timeout=30):
+    def __init__(self, config, save_dir, verbose=False, listen=None, timeout=30,
+                 server_program="npc-server.py"):
         self.config = Path(config)
         self.save_dir = Path(save_dir)
         self.verbose = bool(verbose)
@@ -41,7 +42,7 @@ class Diagnostics:
         self.process = None
         self.channel = grpc.insecure_channel(self.address)
 
-        command = ["npc-server.py"]
+        command = [server_program]
         if self.verbose:
             command.append("--verbose")
         command.extend(["--listen", self.address, str(self.config),
@@ -113,4 +114,3 @@ class Diagnostics:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
-
