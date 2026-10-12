@@ -100,6 +100,9 @@ const _: () = assert!(GENE_WORDS % 2 == 1);
 /// strength. Larger values give sparser networks.
 pub const BETA: f64 = 1.0;
 
+/// Weights with magnitude below this value are omitted from phenomes.
+pub const WEIGHT_THRESHOLD: f64 = 1e-9;
+
 /// The raw genetic data. The explicit `u32` store keeps the serialized form the
 /// same on every platform, unlike the default `usize`.
 type Chromosome = BitVec<u32, Lsb0>;
@@ -312,22 +315,29 @@ impl Genome {
             }
         }
 
-        #[derive(Serialize)]
+        #[derive(Debug, Serialize)]
         #[allow(non_snake_case)]
         struct Phenome {
             T: f64,
             N: usize,
-            W: Vec<f64>,
+            W: Vec<(usize, usize, f64)>,
             I: Vec<Vec<usize>>,
             O: Vec<Vec<usize>>,
         }
         let phenome = Phenome {
             T: self.temperature,
             N: n,
-            W: w,
+            W: w.into_iter()
+                .enumerate()
+                .filter_map(|(index, value)| (value.abs() >= WEIGHT_THRESHOLD).then_some((index / n, index % n, value)))
+                .collect(),
             I: (n_genes..n_genes + n_inputs).map(|node| vec![node]).collect(),
             O: (n_genes + n_inputs..n).map(|node| vec![node]).collect(),
         };
+        eprintln!(
+            "# genes {n} | {:.2} % sparsity",
+            100.0 * phenome.W.len() as f64 / (n * n) as f64
+        );
         serde_json::to_vec(&phenome).expect("phenome is always serializable")
     }
 
@@ -869,28 +879,30 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&genome.phenome()).unwrap();
         assert_eq!(json["T"], 0.5);
         assert_eq!(json["N"], n);
-        let w: Vec<f64> = json["W"]
+        let w: Vec<(usize, usize, f64)> = json["W"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|x| x.as_f64().unwrap())
+            .map(|x| {
+                let entry = x.as_array().unwrap();
+                (
+                    entry[0].as_u64().unwrap() as usize,
+                    entry[1].as_u64().unwrap() as usize,
+                    entry[2].as_f64().unwrap(),
+                )
+            })
             .collect();
-        assert_eq!(w.len(), n * n);
+        assert!(w.len() < n * n);
         assert_eq!(json["I"], serde_json::json!([[genes], [genes + 1], [genes + 2]]));
         assert_eq!(json["O"], serde_json::json!([[genes + 3], [genes + 4]]));
 
         // Strengths are differences of numbers in (0, 1], scaled by 1 / N.
-        assert!(w.iter().all(|x| x.is_finite() && x.abs() <= 1.0 / n as f64));
-        assert!(w.iter().any(|x| *x != 0.0), "the network is empty");
+        assert!(w.iter().all(|(_, _, x)| x.is_finite() && x.abs() <= 1.0 / n as f64));
+        assert!(w.iter().any(|(_, _, x)| *x != 0.0), "the network is empty");
+        assert!(w.iter().all(|(_, _, x)| x.abs() >= WEIGHT_THRESHOLD));
         // Nothing regulates an input, and an output regulates nothing.
-        for target in genes..genes + 3 {
-            assert!(w[target * n..(target + 1) * n].iter().all(|x| *x == 0.0));
-        }
-        for target in 0..n {
-            for source in genes + 3..n {
-                assert_eq!(w[target * n + source], 0.0);
-            }
-        }
+        assert!(w.iter().all(|(target, _, _)| !(genes..genes + 3).contains(target)));
+        assert!(w.iter().all(|(_, source, _)| *source < genes + 3));
     }
 
     #[test]

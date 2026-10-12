@@ -3,8 +3,8 @@
 use arn_controller::ArnController;
 use npc_maker::controller::{
     AdvanceRequest, ControllerRequest, ControllerResponse, GetOutputsRequest, InitializeRequest, IoValue,
-    SetInputsRequest, controller_client::ControllerClient, controller_request::Command,
-    io_value::Value, serve as serve_controller,
+    SetInputsRequest, controller_client::ControllerClient, controller_request::Command, io_value::Value,
+    serve as serve_controller,
 };
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
@@ -14,10 +14,10 @@ use tonic::{Code, Streaming};
 const EPSILON: f64 = 1e-12;
 
 /// Two uncoupled genes. Gene 0 is the input, genes 0 & 1 are outputs 0 & 1.
-const PHENOME: &str = r#"{"T":1.0,"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#;
+const PHENOME: &str = r#"{"T":1.0,"N":2,"I":[[0]],"O":[[0],[1]],"W":[]}"#;
 
 /// The same network as `PHENOME`, but without a temperature.
-const PHENOME_NO_TEMPERATURE: &str = r#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#;
+const PHENOME_NO_TEMPERATURE: &str = r#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[]}"#;
 
 /// Start a server on a free port, returns the URL.
 async fn serve() -> String {
@@ -158,8 +158,7 @@ async fn sessions_are_independent() {
     assert_close(&b.outputs(vec![0]).await.1, &[1.0]);
     // Different phenomes in the same process.
     let mut c = Client::connect(&url).await;
-    c.initialize(r#"{"T":1.0,"N":3,"I":[],"O":[[0,1,2]],"W":[0,0,0,0,0,0,0,0,0]}"#)
-        .await;
+    c.initialize(r#"{"T":1.0,"N":3,"I":[],"O":[[0,1,2]],"W":[]}"#).await;
     assert_close(&c.outputs(vec![0]).await.1, &[1.0]);
 }
 

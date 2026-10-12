@@ -54,8 +54,8 @@ struct Phenome {
     /// Output gene names
     O: Vec<Vec<usize>>,
 
-    /// Weights matrix, flattened in row-major order
-    W: Vec<f64>,
+    /// Weights as (row, column, value) coordinate triples.
+    W: Vec<(usize, usize, f64)>,
 }
 
 /// The dynamical system.
@@ -92,13 +92,26 @@ impl RegulatoryNetwork {
         if N == 0 {
             return Err(Status::invalid_argument("invalid phenome: N must be positive"));
         }
-        if N.checked_mul(N) != Some(W.len()) {
-            return Err(Status::invalid_argument(format!(
-                "invalid phenome: W has {} elements, expected N*N = {}*{}",
-                W.len(),
-                N,
-                N
-            )));
+        let weight_count = N
+            .checked_mul(N)
+            .ok_or_else(|| Status::invalid_argument("invalid phenome: N*N overflows the matrix size"))?;
+        let mut dense_weights = vec![0.0; weight_count];
+        let mut coordinates = std::collections::HashSet::with_capacity(W.len());
+        for (row, col, value) in W {
+            if row >= N || col >= N {
+                return Err(Status::invalid_argument(format!(
+                    "invalid phenome: W coordinate ({row}, {col}) is outside {N}x{N}"
+                )));
+            }
+            if !value.is_finite() {
+                return Err(Status::invalid_argument("invalid phenome: W values must be finite"));
+            }
+            if !coordinates.insert((row, col)) {
+                return Err(Status::invalid_argument(format!(
+                    "invalid phenome: duplicate W coordinate ({row}, {col})"
+                )));
+            }
+            dense_weights[row * N + col] = value;
         }
         for (label, interfaces) in [("I", &I), ("O", &O)] {
             for genes in interfaces {
@@ -109,7 +122,7 @@ impl RegulatoryNetwork {
                 }
             }
         }
-        let matrix = Array2::from_shape_vec((N, N), W)
+        let matrix = Array2::from_shape_vec((N, N), dense_weights)
             .map_err(|error| Status::invalid_argument(format!("invalid phenome: {error}")))?;
         Ok(Self {
             temperature,
@@ -313,30 +326,45 @@ impl ArnController {
     pub fn into_controller(self) -> Controller<Session> {
         let temperature = self.temperature;
         Controller::new(move |phenome: &[u8]| {
-            let network = RegulatoryNetwork::from_phenome(phenome, temperature)
-                .map_err(|status| status.message().to_string())?;
-            Ok(Session { temperature, network: Some(network) })
+            let network =
+                RegulatoryNetwork::from_phenome(phenome, temperature).map_err(|status| status.message().to_string())?;
+            Ok(Session {
+                temperature,
+                network: Some(network),
+            })
         })
     }
 }
 
 impl ControllerSession for Session {
     fn reset(&mut self) -> Result<(), String> {
-        let network = self.network.as_mut().ok_or_else(|| "controller is not initialized".to_string())?;
+        let network = self
+            .network
+            .as_mut()
+            .ok_or_else(|| "controller is not initialized".to_string())?;
         network.reset();
         Ok(())
     }
 
     fn advance(&mut self, dt: f64) -> Result<(), String> {
-        self.network().map_err(|status| status.message().to_string())?.advance(dt).map_err(|status| status.message().to_string())
+        self.network()
+            .map_err(|status| status.message().to_string())?
+            .advance(dt)
+            .map_err(|status| status.message().to_string())
     }
 
     fn set_inputs(&mut self, inputs: &[IoValue]) -> Result<(), String> {
-        self.network().map_err(|status| status.message().to_string())?.set_inputs(inputs).map_err(|status| status.message().to_string())
+        self.network()
+            .map_err(|status| status.message().to_string())?
+            .set_inputs(inputs)
+            .map_err(|status| status.message().to_string())
     }
 
     fn get_outputs(&mut self, ids: &[u64]) -> Result<Vec<IoValue>, String> {
-        self.network().map_err(|status| status.message().to_string())?.get_outputs(ids).map_err(|status| status.message().to_string())
+        self.network()
+            .map_err(|status| status.message().to_string())?
+            .get_outputs(ids)
+            .map_err(|status| status.message().to_string())
     }
 }
 
@@ -421,7 +449,15 @@ mod tests {
     const EPSILON: f64 = 1e-12;
 
     fn phenome(t: f64, n: usize, i: &str, o: &str, w: &[f64]) -> Vec<u8> {
-        format!(r#"{{"T":{t},"N":{n},"I":{i},"O":{o},"W":{w:?}}}"#).into_bytes()
+        let coordinates: Vec<(usize, usize, f64)> = w
+            .iter()
+            .enumerate()
+            .filter_map(|(index, value)| (*value != 0.0).then_some((index / n, index % n, *value)))
+            .collect();
+        serde_json::json!({"T": t, "N": n, "I": serde_json::from_str::<serde_json::Value>(i).unwrap(),
+            "O": serde_json::from_str::<serde_json::Value>(o).unwrap(), "W": coordinates})
+        .to_string()
+        .into_bytes()
     }
 
     fn request(command: Command) -> ControllerRequest {
@@ -625,7 +661,7 @@ mod tests {
     /// Two uncoupled genes, where gene 0 is the input, and both genes are outputs.
     /// This phenome does not specify a temperature.
     fn no_temperature() -> Vec<u8> {
-        br#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#.to_vec()
+        br#"{"N":2,"I":[[0]],"O":[[0],[1]],"W":[]}"#.to_vec()
     }
 
     /// The same network as `no_temperature`, with the temperature specified.
@@ -666,7 +702,7 @@ mod tests {
 
     #[test]
     fn null_temperature_is_missing() {
-        let phenome = br#"{"T":null,"N":2,"I":[[0]],"O":[[0],[1]],"W":[0,0,0,0]}"#.to_vec();
+        let phenome = br#"{"T":null,"N":2,"I":[[0]],"O":[[0],[1]],"W":[]}"#.to_vec();
         assert_close(&drive(&mut Session::new(2.0), phenome), &[1.5, 0.5]);
     }
 
@@ -688,7 +724,7 @@ mod tests {
         let status = Session::new(f64::NAN).handle(init(no_temperature())).unwrap_err();
         assert_eq!(status.code(), tonic::Code::InvalidArgument);
         let status = Session::new(1.0)
-            .handle(init(phenome(f64::INFINITY, 2, "[]", "[]", &[0.0; 4])))
+            .handle(init(br#"{"T":1e999,"N":2,"I":[],"O":[],"W":[]}"#.to_vec()))
             .unwrap_err();
         assert_eq!(status.code(), tonic::Code::InvalidArgument);
     }
@@ -713,8 +749,22 @@ mod tests {
             ("missing field", br#"{"T":1.0,"N":1}"#.to_vec()),
             ("negative T", phenome(-1.0, 2, "[]", "[]", &w4)),
             ("N is zero", phenome(1.0, 0, "[]", "[]", &[])),
-            ("W too short", phenome(1.0, 2, "[]", "[]", &[0.0; 3])),
-            ("W too long", phenome(1.0, 2, "[]", "[]", &[0.0; 5])),
+            (
+                "malformed W coordinate",
+                br#"{"T":1.0,"N":2,"I":[],"O":[],"W":[[0,0]]}"#.to_vec(),
+            ),
+            (
+                "W coordinate out of range",
+                br#"{"T":1.0,"N":2,"I":[],"O":[],"W":[[2,0,1.0]]}"#.to_vec(),
+            ),
+            (
+                "duplicate W coordinate",
+                br#"{"T":1.0,"N":2,"I":[],"O":[],"W":[[0,0,1.0],[0,0,2.0]]}"#.to_vec(),
+            ),
+            (
+                "non-finite W value",
+                br#"{"T":1.0,"N":2,"I":[],"O":[],"W":[[0,0,"NaN"]]}"#.to_vec(),
+            ),
             ("input gene out of range", phenome(1.0, 2, "[[2]]", "[]", &w4)),
             ("output gene out of range", phenome(1.0, 2, "[]", "[[0,9]]", &w4)),
         ];
