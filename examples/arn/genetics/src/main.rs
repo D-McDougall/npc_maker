@@ -3,7 +3,7 @@ use npc_maker::genetics::{self, Genetics};
 use npc_maker::individual::Individual;
 use std::{env, net::SocketAddr};
 
-const DEFAULT_MUTATION_RATE: f64 = 0.01;
+const DEFAULT_MUTATION_RATE: f64 = 0.001;
 const DEFAULT_DUPLICATIONS: usize = 9;
 const DEFAULT_INPUTS: usize = 3;
 const DEFAULT_OUTPUTS: usize = 2;
@@ -113,7 +113,7 @@ impl Genetics for ArnGenetics {
         } else {
             let genome = Genome::new(
                 self.duplications,
-                self.mutation_rate,
+                0.01,
                 self.inputs,
                 self.outputs,
                 self.temperature,
