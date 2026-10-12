@@ -22,11 +22,6 @@ tonic::include_proto!("controller");
 /// additional conversion layer. Errors returned by these methods end the
 /// current session and are reported as gRPC `INVALID_ARGUMENT`.
 pub trait ControllerSession: Send + 'static {
-    /// Construct a fresh session from its phenome.
-    fn new(phenome: &[u8]) -> Result<Self, String>
-    where
-        Self: Sized;
-
     /// Reset the controller to its initial state.
     fn reset(&mut self) -> Result<(), String> {
         Ok(())
@@ -228,11 +223,14 @@ mod tests {
     #[derive(Debug)]
     struct TestSession { phenome: Vec<u8>, value: f64 }
 
-    impl ControllerSession for TestSession {
-        fn new(phenome: &[u8]) -> Result<Self, String> {
+    impl TestSession {
+        fn create(phenome: &[u8]) -> Result<Self, String> {
             if phenome == b"bad" { return Err("invalid phenome".into()); }
             Ok(Self { phenome: phenome.to_vec(), value: 0.0 })
         }
+    }
+
+    impl ControllerSession for TestSession {
         fn reset(&mut self) -> Result<(), String> { self.value = 0.0; Ok(()) }
         fn advance(&mut self, dt: f64) -> Result<(), String> { self.value += dt; Ok(()) }
         fn set_inputs(&mut self, inputs: &[IoValue]) -> Result<(), String> {
@@ -250,7 +248,7 @@ mod tests {
         }
     }
 
-    fn factory() -> Controller<TestSession> { Controller::new(TestSession::new) }
+    fn factory() -> Controller<TestSession> { Controller::new(|phenome| TestSession::create(phenome)) }
 
     fn request(command: controller_request::Command, request_id: u64) -> ControllerRequest {
         ControllerRequest { request_id, command: Some(command) }
