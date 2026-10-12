@@ -1,5 +1,6 @@
-use npc_maker::evolution::{
-    DeathRequest, DeathResponse, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer,
+use npc_maker::{
+    MAX_MESSAGE_SIZE,
+    evolution::{DeathRequest, DeathResponse, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer},
 };
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -136,8 +137,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Server::builder()
         .add_service(
             EvolutionServer::new(wrapper)
-                .max_encoding_message_size(8 * 1024 * 1024)
-                .max_decoding_message_size(8 * 1024 * 1024),
+                .max_encoding_message_size(MAX_MESSAGE_SIZE)
+                .max_decoding_message_size(MAX_MESSAGE_SIZE),
         )
         .serve(addr)
         .await?;

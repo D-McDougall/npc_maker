@@ -14,7 +14,7 @@ import grpc
 
 from . import genetics_pb2, genetics_pb2_grpc
 from .individual import Individual
-from . import _MAX_MESSAGE_SIZE
+from . import MAX_MESSAGE_SIZE
 
 __all__ = ("Genetics",)
 
@@ -80,8 +80,8 @@ class Genetics(genetics_pb2_grpc.GeneticsServicer, ABC):
 
         executor = futures.ThreadPoolExecutor()
         server = grpc.server(executor, options=[
-            ('grpc.max_send_message_length', _MAX_MESSAGE_SIZE),
-            ('grpc.max_receive_message_length', _MAX_MESSAGE_SIZE),
+            ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
         ])
         genetics_pb2_grpc.add_GeneticsServicer_to_server(
             cls(*args, **kwargs),

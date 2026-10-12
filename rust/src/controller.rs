@@ -21,6 +21,7 @@ tonic::include_proto!("controller");
 /// implementations can efficiently return a `Vec<IoValue>` without an
 /// additional conversion layer. Errors returned by these methods end the
 /// current session and are reported as gRPC `INVALID_ARGUMENT`.
+#[allow(unused_variables)]
 pub trait ControllerSession: Send + 'static {
     /// Reset the controller to its initial state.
     fn reset(&mut self) -> Result<(), String> {

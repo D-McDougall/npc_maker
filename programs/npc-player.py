@@ -48,6 +48,7 @@ from google.protobuf.descriptor import FieldDescriptor
 from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import individual_pb2
 from npc_maker.individual import Individual
+from npc_maker import MAX_MESSAGE_SIZE
 import mate_selection
 
 
@@ -286,7 +287,11 @@ def serve(directory, selection, score, listen):
     player = Player(directory, selection, score)
 
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=10)
+        futures.ThreadPoolExecutor(max_workers=10),
+        options=[
+            ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
+        ]
     )
 
     evolution_pb2_grpc.add_EvolutionServicer_to_server(

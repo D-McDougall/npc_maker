@@ -30,9 +30,8 @@ from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
 from npc_maker import genetics_pb2, genetics_pb2_grpc
+from npc_maker import MAX_MESSAGE_SIZE
 from npc_maker.individual import Individual
-
-MAX_MESSAGE_SIZE = 8 * 1024 * 1024
 
 class LocalProcess:
     """

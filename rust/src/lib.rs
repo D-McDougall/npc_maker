@@ -19,4 +19,4 @@ pub mod environment {
     tonic::include_proto!("environment");
 }
 
-const MAX_MESSAGE_SIZE: usize = 8 * 1024 * 1024;
+pub const MAX_MESSAGE_SIZE: usize = 20 * 1024 * 1024;

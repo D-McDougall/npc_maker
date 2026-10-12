@@ -6,4 +6,4 @@ artificial-life experiment. The NPC Maker also includes a collection of
 ready-to-use tools and environments.
 """
 
-_MAX_MESSAGE_SIZE = 8 *1024 * 1024
+MAX_MESSAGE_SIZE = 20 * 1024 * 1024
