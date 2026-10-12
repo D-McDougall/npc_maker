@@ -10,6 +10,7 @@ creates one controller instance for each session.
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from concurrent import futures
+from math import isfinite
 from numbers import Real
 
 import grpc
@@ -186,6 +187,8 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                     dt = request.advance.dt
                     if dt < 0:
                         raise ValueError("advance dt must be non-negative")
+                    if not isfinite(dt):
+                        raise ValueError("advance dt must be finite")
                     controller.advance(dt)
 
                 elif command == "set_inputs":

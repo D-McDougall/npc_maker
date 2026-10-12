@@ -3,7 +3,7 @@
     version = "0.3.0"
     edition = "2024"
     license = "MIT-0"
-    description = "Evolve AIs in simulated environments populated by AI agents"
+    description = "Evolve AIs in simulated environments"
     repository = "https://github.com/D-McDougall/npc_maker"
     categories = ["science"]
     keywords = ["ai", "alife", "evolution", "npc_maker"]

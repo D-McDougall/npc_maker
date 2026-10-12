@@ -1,4 +1,4 @@
-//! User-facing API for implementing controller gRPC sessions.
+//! A simple API for implementing Controllers.
 //!
 //! Implement `ControllerSession` for the stateful object representing one
 //! environment/controller session. `Controller<T>` creates a fresh session
