@@ -14,7 +14,7 @@ Use the ControllerClient class to run a controller process locally.
 
 from abc import ABC, abstractmethod
 import atexit
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from concurrent import futures
 import queue
 import socket
@@ -141,15 +141,13 @@ class ControllerClient:
         """
         self._send("reset", controller_pb2.ResetRequest())
 
-    def set_inputs(self, values) -> None:
+    def set_inputs(self, values: Iterable[IoValueType]) -> None:
         """Send input values, assigning interface IDs by sequence position.
 
         ``values[0]`` is sent as interface ID 0, ``values[1]`` as ID 1, and so
-        on. This method currently writes every value to the protobuf ``number``
-        field, so callers should supply numeric values.
+        on. Values may be numbers, strings, or bytes.
         """
-        inputs = [controller_pb2.IoValue(id=i, number=value)
-                  for i, value in enumerate(values)]
+        inputs = [_protobuf_value(i, value) for i, value in enumerate(values)]
         self._send("set_inputs", controller_pb2.SetInputsRequest(inputs=inputs))
 
     def advance(self, interval: float) -> None:
