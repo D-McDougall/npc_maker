@@ -9,7 +9,7 @@
 
 use ndarray::{Array1, Array2};
 use npc_maker::controller::{
-    ControllerSession, ControllerRequest, ControllerResponse, IoValue,
+    Controller, ControllerSession, ControllerRequest, ControllerResponse, IoValue,
     controller_request::Command, io_value::Value,
 };
 use serde::Deserialize;
@@ -305,6 +305,18 @@ impl ArnController {
 impl Default for ArnController {
     fn default() -> Self {
         Self::new(DEFAULT_TEMPERATURE)
+    }
+}
+
+impl ArnController {
+    /// Build the shared server API using this configuration.
+    pub fn into_controller(self) -> Controller<Session> {
+        let temperature = self.temperature;
+        Controller::new(move |phenome: &[u8]| {
+            let network = RegulatoryNetwork::from_phenome(phenome, temperature)
+                .map_err(|status| status.message().to_string())?;
+            Ok(Session { temperature, network: Some(network) })
+        })
     }
 }
 
