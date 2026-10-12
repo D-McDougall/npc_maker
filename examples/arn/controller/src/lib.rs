@@ -316,15 +316,15 @@ impl ControllerSession for Session {
     }
 
     fn advance(&mut self, dt: f64) -> Result<(), String> {
-        self.network()?.advance(dt).map_err(|status| status.message().to_string())
+        self.network().map_err(|status| status.message().to_string())?.advance(dt).map_err(|status| status.message().to_string())
     }
 
     fn set_inputs(&mut self, inputs: &[IoValue]) -> Result<(), String> {
-        self.network()?.set_inputs(inputs).map_err(|status| status.message().to_string())
+        self.network().map_err(|status| status.message().to_string())?.set_inputs(inputs).map_err(|status| status.message().to_string())
     }
 
     fn get_outputs(&mut self, ids: &[u64]) -> Result<Vec<IoValue>, String> {
-        self.network()?.get_outputs(ids).map_err(|status| status.message().to_string())
+        self.network().map_err(|status| status.message().to_string())?.get_outputs(ids).map_err(|status| status.message().to_string())
     }
 }
 
