@@ -1,10 +1,10 @@
 """
 Base API for implementing NPC Maker controllers.
 
-Subclasses construct a controller session from its phenome and implement
-get_outputs(). The gRPC adapter owns the streaming protocol, converts typed
-Python I/O values to and from protobuf messages, and creates one controller
-instance for each session.
+Subclasses construct a controller session from its phenome. The gRPC
+adapter (`npc_maker.controller.Controller` base class) owns the streaming
+protocol, converts typed Python I/O values to and from protobuf messages, and
+creates one controller instance for each session.
 """
 
 from abc import ABC, abstractmethod
@@ -64,13 +64,18 @@ class Controller(ABC):
 
     The server constructs a fresh subclass instance for every session, passing
     the session's phenome to __init__. Subclasses must implement __init__ and
-    get_outputs(). Stateless or reactive controllers may inherit the no-op
-    implementations of reset(), advance(), and set_inputs().
+    get_outputs(). The other methods (reset, advance, and set_inputs) are
+    optional and no-op by default.
     """
 
     @abstractmethod
-    def __init__(self, phenome: bytes):
-        """Construct controller state from genetic material (the phenome)."""
+    def __init__(self, phenome: bytes, *args, **kwargs):
+        """
+        Construct controller state from genetic material (the phenome).
+
+        This also receives the *args and **kwargs that were given to the
+        `Controller.main()` class-method.
+        """
         raise NotImplementedError
 
     def reset(self) -> None:
@@ -98,6 +103,9 @@ class Controller(ABC):
         InitializeRequest phenome followed by *args and **kwargs. The listen
         argument is a gRPC address such as "127.0.0.1:50051". This method
         blocks until the server is stopped.
+
+        Additional arguments (args and kwargs) are passed through to the
+        controller class's `__init__()` method.
         """
         if not isinstance(listen, str) or not listen:
             raise ValueError("listen must be a non-empty host:port address")
@@ -164,26 +172,22 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                     )
                     continue
 
-                if command == "initialize":
+                elif command == "initialize":
                     self._abort(
                         context,
                         grpc.StatusCode.INVALID_ARGUMENT,
                         "controller is already initialized",
                     )
-                if command is None:
-                    self._abort(
-                        context,
-                        grpc.StatusCode.INVALID_ARGUMENT,
-                        "request contains no command",
-                    )
 
                 if command == "reset":
                     controller.reset()
+
                 elif command == "advance":
                     dt = request.advance.dt
                     if dt < 0:
                         raise ValueError("advance dt must be non-negative")
                     controller.advance(dt)
+
                 elif command == "set_inputs":
                     inputs = {}
                     for item in request.set_inputs.inputs:
@@ -191,6 +195,7 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                             raise ValueError(f"duplicate input interface ID: {item.id}")
                         inputs[item.id] = _python_value(item)
                     controller.set_inputs(inputs)
+
                 elif command == "get_outputs":
                     ids = list(request.get_outputs.ids)
                     if any(not _valid_id(interface_id) for interface_id in ids):
@@ -216,6 +221,14 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                         request_id=request.request_id,
                         outputs=values,
                     )
+
+                elif command is None:
+                    self._abort(
+                        context,
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        "request contains no command",
+                    )
+
                 else:
                     self._abort(
                         context,

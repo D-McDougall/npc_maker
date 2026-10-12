@@ -30,11 +30,9 @@ class XorController(Controller):
         self.inputs = {0: 0.0, 1: 0.0}
 
     def set_inputs(self, inputs):
-        self.inputs.update({
-            interface_id: value
-            for interface_id, value in inputs.items()
-            if interface_id < 2
-        })
+        if any(interface_id >= 2 for interface_id in inputs.values()):
+            raise ValueError(f"invalid input interface ID (expected 0 or 1)")
+        self.inputs.update(inputs)
 
     def get_outputs(self, ids):
         left, right = bool(self.inputs[0]), bool(self.inputs[1])
