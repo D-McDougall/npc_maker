@@ -1,11 +1,15 @@
-"""
-Base API for making and using NPC Maker controllers.
+"""Client and server APIs for NPC Maker controller sessions.
 
-# To implement a new Controller:
+# Making new controllers:
 
 Subclasses the ControllerServer, which accepts the phenome as an argument to its
 constructor. Then call `main()` the main function, which starts a listen
 server, and creates one controller instance for each incomming session.
+
+# Running controllers:
+
+Use the ControllerClient class to run a controller process locally.
+
 """
 
 from abc import ABC, abstractmethod
@@ -44,6 +48,11 @@ class ControllerClient:
     _cleanup_registered = False
 
     def __init__(self, command, phenome: bytes):
+        """Open a session using a controller CLI command and its phenome.
+
+        One processes and gRPC connection is shared by all clients with the same
+        command; each client gets its own session and controller instance.
+        """
         self._connection = self._get_connection(command)
         self._requests = queue.Queue()
         self._responses = {}
@@ -89,12 +98,14 @@ class ControllerClient:
 
     @classmethod
     def _close_connections(cls):
+        """Close every cached process and channel during interpreter exit."""
         with cls._connections_lock:
             for connection in cls._connections.values():
                 connection.close()
             cls._connections.clear()
 
     def _send(self, command: str, value) -> int:
+        """Queue a command in session order and return its correlation ID."""
         with self._condition:
             if self._closed:
                 raise RuntimeError("controller session is closed")
@@ -107,6 +118,7 @@ class ControllerClient:
         return request_id
 
     def _read_responses(self):
+        """Collect streaming replies and wake callers waiting for a reply."""
         try:
             for response in self._call:
                 with self._condition:
@@ -123,17 +135,33 @@ class ControllerClient:
                 self._condition.notify_all()
 
     def reset(self) -> None:
+        """Request that the controller restore its initial state.
+
+        This command is queued without waiting for an acknowledgement.
+        """
         self._send("reset", controller_pb2.ResetRequest())
 
     def set_inputs(self, values) -> None:
+        """Send input values, assigning interface IDs by sequence position.
+
+        ``values[0]`` is sent as interface ID 0, ``values[1]`` as ID 1, and so
+        on. This method currently writes every value to the protobuf ``number``
+        field, so callers should supply numeric values.
+        """
         inputs = [controller_pb2.IoValue(id=i, number=value)
                   for i, value in enumerate(values)]
         self._send("set_inputs", controller_pb2.SetInputsRequest(inputs=inputs))
 
     def advance(self, interval: float) -> None:
+        """Request a state advance by ``interval`` seconds, without waiting."""
         self._send("advance", controller_pb2.AdvanceRequest(dt=interval))
 
     def get_outputs(self, ids):
+        """Return a mapping of requested output interface IDs to values.
+
+        This call waits for the matching response. The server reports an
+        error if any requested ID is absent.
+        """
         request_id = self._send(
             "get_outputs", controller_pb2.GetOutputsRequest(ids=list(ids)))
         with self._condition:
@@ -148,12 +176,14 @@ class ControllerClient:
                     for output in response.outputs}
 
     def get_output(self, output_id: int = 0) -> IoValueType:
+        """Return one output value, defaulting to interface ID 0."""
         outputs = self.get_outputs([output_id])
         if output_id in outputs:
             return outputs[output_id]
         raise RuntimeError(f"controller did not return output {output_id}")
 
     def close(self) -> None:
+        """End this session and stop its response-reader thread."""
         with self._condition:
             if self._closed:
                 return
@@ -165,9 +195,11 @@ class ControllerClient:
             self._reader.join(timeout=1)
 
     def __enter__(self):
+        """Return this client for use as a context manager."""
         return self
 
     def __exit__(self, *_):
+        """Close the session when leaving a ``with`` block."""
         self.close()
 
 
@@ -175,6 +207,7 @@ class _ControllerConnection:
     """Process, channel, and stub cached for a controller CLI invocation."""
 
     def __init__(self, command):
+        """Start a CLI process and wait up to 30 seconds for its gRPC port."""
         address = f"127.0.0.1:{_free_port()}"
         self.process = subprocess.Popen([*command, "--listen", address])
         self.channel = grpc.insecure_channel(address)
@@ -198,6 +231,7 @@ class _ControllerConnection:
             raise
 
     def close(self):
+        """Close the channel and stop the child process, escalating if needed."""
         self.channel.close()
         if self.process.poll() is None:
             self.process.terminate()
@@ -209,6 +243,7 @@ class _ControllerConnection:
 
 
 def _free_port():
+    """Return an available loopback TCP port selected by the operating system."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
@@ -278,12 +313,20 @@ class ControllerServer(ABC):
         pass
 
     def set_inputs(self, inputs: dict[int, IoValueType]) -> None:
-        """Receive sensory inputs indexed by interface ID."""
+        """Receive sensory inputs keyed by interface ID.
+
+        The default implementation ignores inputs. Override this method when
+        the controller needs to use environment-provided values.
+        """
         pass
 
     @abstractmethod
     def get_outputs(self, ids: list[int]) -> Mapping[int, IoValueType]:
-        """Return output values for every requested motor interface ID."""
+        """Return values for every requested motor interface ID.
+
+        Implementations must return a mapping containing every ID in ``ids``;
+        values may be numbers, strings, or bytes.
+        """
         raise NotImplementedError
 
     @classmethod
@@ -301,6 +344,7 @@ class ControllerServer(ABC):
         if not isinstance(listen, str) or not listen:
             raise ValueError("listen must be a non-empty host:port address")
 
+        # The service can process multiple independent session streams at once.
         executor = futures.ThreadPoolExecutor()
         server = grpc.server(executor, options=[
             ("grpc.max_send_message_length", MAX_MESSAGE_SIZE),
@@ -333,6 +377,7 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
     """Adapt a user-facing ControllerServer class to the generated gRPC service."""
 
     def __init__(self, controller_type, args, kwargs):
+        """Keep the subclass and constructor arguments for each new stream."""
         self._controller_type = controller_type
         self._args = args
         self._kwargs = kwargs
@@ -344,6 +389,12 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
         raise _SessionError((code, details))
 
     def Session(self, requests, context):
+        """Dispatch one ordered request stream to one controller instance.
+
+        The initialize command is required first. Only output requests produce
+        replies; all command or controller failures terminate the stream with
+        an appropriate gRPC status.
+        """
         controller = None
 
         for request in requests:
@@ -356,6 +407,7 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                             grpc.StatusCode.INVALID_ARGUMENT,
                             "the first command must initialize the controller",
                         )
+                    # Keep session state isolated while reusing the server process.
                     controller = self._controller_type(
                         request.initialize.phenome,
                         *self._args,
@@ -406,6 +458,8 @@ class _ControllerService(controller_pb2_grpc.ControllerServicer):
                             f"get_outputs() did not return requested IDs: {missing}"
                         )
 
+                    # Preserve request order in the response even if the
+                    # controller's mapping uses a different iteration order.
                     values = [
                         _protobuf_value(interface_id, outputs[interface_id])
                         for interface_id in ids
