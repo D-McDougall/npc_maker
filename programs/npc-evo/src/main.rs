@@ -1,6 +1,6 @@
-use npc_maker::{
-    MAX_MESSAGE_SIZE,
-    evolution::{DeathRequest, DeathResponse, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer},
+use npc_maker::MAX_MESSAGE_SIZE;
+use npc_maker::evolution::{
+    DeathRequest, DeathResponse, SpawnRequest, SpawnResponse, evolution_server::EvolutionServer,
 };
 use std::path::PathBuf;
 use std::sync::Mutex;

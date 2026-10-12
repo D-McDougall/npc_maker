@@ -32,6 +32,7 @@ fn main_inner() -> Result<(), Box<dyn std::error::Error>> {
                 "controller.proto",
                 "diagnostics.proto",
                 "environment.proto",
+                "experiment.proto",
                 "evolution.proto",
                 "genetics.proto",
                 "individual.proto",
@@ -43,7 +44,14 @@ fn main_inner() -> Result<(), Box<dyn std::error::Error>> {
 
     pbjson_build::Builder::new()
         .register_descriptors(&descriptors)?
-        .build(&[".individual", ".environment", ".evolution", ".genetics"])?;
+        .build(&[
+            ".diagnostics",
+            ".environment",
+            ".evolution",
+            ".experiment",
+            ".genetics",
+            ".individual",
+        ])?;
 
     Ok(())
 }

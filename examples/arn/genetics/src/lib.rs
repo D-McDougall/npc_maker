@@ -158,10 +158,7 @@ pub fn crossover(chromosomes: &[Chromosome]) -> Chromosome {
 /// # Panics
 ///
 /// Panics if `chromosomes` is empty or if their lengths differ.
-pub fn crossover_with_rng<R: Rng + ?Sized>(
-    rng: &mut R,
-    chromosomes: &[Chromosome],
-) -> Chromosome {
+pub fn crossover_with_rng<R: Rng + ?Sized>(rng: &mut R, chromosomes: &[Chromosome]) -> Chromosome {
     assert!(!chromosomes.is_empty(), "crossover requires at least one chromosome");
     let len = chromosomes[0].len();
     assert!(

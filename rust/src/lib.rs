@@ -19,4 +19,14 @@ pub mod environment {
     tonic::include_proto!("environment");
 }
 
+pub mod diagnostics {
+    tonic::include_proto!("diagnostics");
+    tonic::include_proto!("diagnostics.serde");
+}
+
+pub mod experiment {
+    tonic::include_proto!("experiment");
+    tonic::include_proto!("experiment.serde");
+}
+
 pub const MAX_MESSAGE_SIZE: usize = 20 * 1024 * 1024;
