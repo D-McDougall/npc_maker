@@ -3,7 +3,7 @@
     version = "0.3.0"
     edition = "2024"
     license = "MIT-0"
-    description = "Evolve AIs in simulated environments"
+    description = "Evolve AIs in simulated environments populated by AI agents"
     repository = "https://github.com/D-McDougall/npc_maker"
     categories = ["science"]
     keywords = ["ai", "alife", "evolution", "npc_maker"]
@@ -21,6 +21,8 @@
     tonic               = "0.14"
     tonic-prost         = "0.14"
     prost               = "0.14"
+    tokio               = { version = "1", features = ["macros", "rt", "sync"] }
+    tokio-stream        = "0.1"
     pbjson              = "0.9.0"
     pbjson-types        = "0.9.0"
 
