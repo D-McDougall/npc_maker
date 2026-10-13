@@ -14,3 +14,7 @@
     thiserror   = "2"
     tokio       = {version = "1.53.1", features = ["macros", "net", "rt-multi-thread"]}
     tonic       = "0.14"
+
+[dev-dependencies]
+    # The xor_genome example replays the XOR environment through the controller.
+    arn_controller = {path = "../controller"}

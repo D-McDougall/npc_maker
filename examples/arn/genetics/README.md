@@ -105,6 +105,29 @@ A large genome makes a large phenome, whose weights matrix has `N * N` entries
 for `N` genes and I/O sites. Growing a genome is fast: about 2 ms for 131,072
 bits in a release build.
 
+## Hand-built genomes
+
+A genome does not have to be grown. `Gene::encode` writes one gene (enhancer,
+inhibitor, promoter, and five copies of the effector) as 232 bits, and
+`Genome::from_chromosomes` makes a genome from chromosomes made of such genes,
+with explicit I/O binding sites. `Genome::genes` reads the genes back, so a
+hand-built chromosome can be checked: the scan accepts a promoter wherever the 8
+bits match, so a word with a run of alternating bits can make an extra gene.
+
+The `xor_genome` example is a complete hand-crafted genome which solves the XOR
+task: one self-enhancing hidden gene, a spacer gene, two inputs and an output,
+with exactly three edges. Its documentation derives why the network computes XOR.
+
+```
+cargo run -p arn_genetics --example xor_genome
+```
+
+It builds the genome, converts it to a phenome, asserts that the genes, the
+edges and the answers are the designed ones, replays the XOR environment in
+process through `arn_controller` (a replica, not a run of the environment), and
+saves an `Individual` to a new directory in the current working directory. The
+individual has no score, because it has not been run in a real environment.
+
 ## Serialization
 
 A genome is serialized with [serde](https://serde.rs) and

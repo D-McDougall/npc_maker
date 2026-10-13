@@ -96,6 +96,12 @@
 //!
 //! A genome can contain multiple homologous chromosomes. The genes from each
 //! chromosome are concatenated in chromosome order when building its phenome.
+//!
+//! # Hand-built genomes
+//!
+//! [`Gene::encode`] writes a gene into a chromosome, and [`Genome::from_chromosomes`]
+//! makes a genome from it. See the `xor_genome` example, which builds a genome
+//! that solves the XOR task.
 
 use bitvec::prelude::*;
 use rand::distr::{Bernoulli, Distribution};
