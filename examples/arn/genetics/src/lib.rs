@@ -69,12 +69,27 @@
 //!   to proteins, but it regulates nothing, so it only reports.
 //!
 //! Protein `j` acts on node `i` with strength
-//! `(exp(B * (u+ - max u+)) - exp(B * (u- - max u-))) / N`,
+//! `(exp(B * (u+ - 32)) - exp(B * (u- - 32))) / N`,
 //! where `u+` and `u-` are the number of bits in which the effector of `j`
-//! differs from the enhancer and from the inhibitor of `i`, `max` is taken over
-//! all edges in the network, `B` is [`BETA`], and `N` is the number of nodes.
+//! differs from the enhancer and from the inhibitor of `i`, `B` is [`BETA`], and
+//! `N` is the number of nodes. The 32 is [`SITE_SIZE`], the best possible match,
+//! which is a protein that is the exact complement of the site. A protein which
+//! is the complement of a site except for `k` bits therefore acts through that
+//! site with strength `exp(-B * k) / N`, and an enhancer and an inhibitor
+//! subtract.
+//!
+//! Banzhaf (2003) scales the match differently, "to have a maximum match for
+//! the best matching protein", separately for the enhancing and the inhibiting
+//! signals. That makes the strongest match found in the network count as 1.
+//! This crate does not do that. The maximum is the fixed [`SITE_SIZE`], so the
+//! strength of an edge does not depend on the other edges in the network. In
+//! most networks the best match is some way short of 32 bits, so the strengths
+//! here are weaker than the paper's. The temperature `T` sets the overall rate.
+//!
 //! These strengths are the weights matrix `W` of the phenome, which uses the
-//! JSON format of the `arn` controller: `{"T", "N", "W", "I", "O"}`.
+//! JSON format of the `arn` controller: `{"T", "N", "W", "I", "O"}`. `W` lists
+//! the weights as sparse `[target, source, value]` triples, and leaves out any
+//! weight below [`WEIGHT_THRESHOLD`] in magnitude.
 //!
 //! Nodes are numbered with the genes first (in chromosome order), then the
 //! input sites, then the output sites.
