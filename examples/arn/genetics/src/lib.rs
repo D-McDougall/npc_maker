@@ -89,13 +89,20 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 /// Width of a regulatory site and of a protein, in bits.
-const SITE_SIZE: usize = 32;
+pub const SITE_SIZE: usize = 32;
 
 /// The promoter, which marks the start of a gene.
-const START_SEQ: u8 = 0b10101010;
+///
+/// It is stored least significant bit first, like every word in the chromosome,
+/// so reading the chromosome from the left the promoter is `01010101`.
+pub const START_SEQ: u8 = 0b10101010;
 
 /// Number of 32-bit words in the coding region of a gene.
-const GENE_WORDS: usize = 5;
+pub const GENE_WORDS: usize = 5;
+
+/// Length of one gene in a chromosome, in bits: two regulatory sites, the
+/// promoter, and the coding region. See [`Gene::encode`].
+pub const GENE_BITS: usize = 2 * SITE_SIZE + u8::BITS as usize + GENE_WORDS * SITE_SIZE;
 
 // Majority vote needs an odd number of voters, so there are never ties.
 const _: () = assert!(GENE_WORDS % 2 == 1);
@@ -405,11 +412,7 @@ impl Genome {
     /// number of nodes `N` is zero only if the chromosome has no genes and the
     /// genome has no I/O sites, which the controller will reject.
     pub fn phenome(&self) -> Vec<u8> {
-        let genes: Vec<Gene> = self
-            .chromosomes
-            .iter()
-            .flat_map(|chromosome| Gene::find_all(chromosome))
-            .collect();
+        let genes = self.genes();
         let (n_genes, n_inputs) = (genes.len(), self.inputs.len());
         let n = n_genes + n_inputs + self.outputs.len();
         let nodes: Vec<&Gene> = genes.iter().chain(&self.inputs).chain(&self.outputs).collect();
@@ -506,6 +509,18 @@ impl Genome {
         self.temperature
     }
 
+    /// The genes found in the chromosomes, in node order: every gene of the
+    /// first chromosome in chromosome order, then those of the second, and so on.
+    ///
+    /// This does not include the I/O binding sites, see [`Genome::inputs`] and
+    /// [`Genome::outputs`].
+    pub fn genes(&self) -> Vec<Gene> {
+        self.chromosomes
+            .iter()
+            .flat_map(|chromosome| Gene::find_all(chromosome))
+            .collect()
+    }
+
     /// Total number of genes across all chromosomes.
     pub fn num_genes(&self) -> usize {
         self.chromosomes.iter().map(|c| Gene::find_all(c).len()).sum()
@@ -528,6 +543,7 @@ pub struct Gene {
 }
 
 impl Gene {
+    /// Create a gene or an I/O binding site from its three fields.
     pub fn new(enhancer: u32, inhibitor: u32, effector: u32) -> Self {
         Self {
             enhancer,
@@ -541,9 +557,43 @@ impl Gene {
         Self::new(rng.random(), rng.random(), rng.random())
     }
 
+    /// Write this gene as [`GENE_BITS`] bits of chromosome, the inverse of
+    /// [`Gene::find_all`]:
+    ///
+    /// ```text
+    /// | enhancer (32) | inhibitor (32) | promoter (8) | effector x 5 (5 x 32) |
+    /// ```
+    ///
+    /// The coding region is five copies of the effector. The effector is the
+    /// bitwise majority of the coding region, and the majority of five equal words
+    /// is that word, so [`Gene::find_all`] reads the same effector back.
+    ///
+    /// Concatenating the encodings of several genes gives a chromosome which
+    /// holds those genes, in that order, *provided that* the scan finds no other
+    /// promoter. The scan accepts a promoter wherever the 8 bits match, and
+    /// there is room for a full coding region after it, which includes the sites
+    /// and coding regions of the genes before the last. A word with a run of 8
+    /// alternating bits, such as the effector `0x5555_5555`, therefore makes
+    /// extra genes if other genes follow it. Check the result with
+    /// [`Gene::find_all`] or [`Genome::genes`].
+    pub fn encode(&self) -> Chromosome {
+        let mut chromosome = Chromosome::with_capacity(GENE_BITS);
+        chromosome.extend_from_bitslice(self.enhancer.view_bits::<Lsb0>());
+        chromosome.extend_from_bitslice(self.inhibitor.view_bits::<Lsb0>());
+        chromosome.extend_from_bitslice(START_SEQ.view_bits::<Lsb0>());
+        for _ in 0..GENE_WORDS {
+            chromosome.extend_from_bitslice(self.effector.view_bits::<Lsb0>());
+        }
+        debug_assert_eq!(chromosome.len(), GENE_BITS);
+        chromosome
+    }
+
     /// Scan a chromosome for genes, in order. Genes may overlap, but promoters
     /// may not: after a promoter the scan resumes just past it.
-    fn find_all(sequence: &BitSlice<u32, Lsb0>) -> Vec<Self> {
+    ///
+    /// A promoter is accepted only if there is room for two full regulatory sites
+    /// before it and a full coding region after it. See the module documentation.
+    pub fn find_all(sequence: &BitSlice<u32, Lsb0>) -> Vec<Self> {
         let promoter_len = u8::BITS as usize;
         let body_len = GENE_WORDS * SITE_SIZE;
         let mut genes = vec![];
@@ -1038,5 +1088,168 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&Genome::new(0, 0.0, 0, 0, 1.0).phenome()).unwrap();
         assert_eq!(json["N"], 0);
         assert_eq!(json["W"], serde_json::json!([]));
+    }
+
+    /// Three genes whose words hold no run of alternating bits, so that encoding
+    /// them next to each other cannot make an extra promoter.
+    fn plain_genes() -> [Gene; 3] {
+        [
+            Gene::new(ENHANCER, INHIBITOR, 0x0F0F_0F0F),
+            Gene::new(0x00FF_FF00, 0xF0F0_F0F0, 0x3333_3333),
+            Gene::new(0, u32::MAX, 0xC000_0003),
+        ]
+    }
+
+    /// The phenome of `genome`, with its weights as `(target, source, value)`.
+    fn weights(genome: &Genome) -> (serde_json::Value, Vec<(u64, u64, f64)>) {
+        let json: serde_json::Value = serde_json::from_slice(&genome.phenome()).unwrap();
+        let w = json["W"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| (x[0].as_u64().unwrap(), x[1].as_u64().unwrap(), x[2].as_f64().unwrap()))
+            .collect();
+        (json, w)
+    }
+
+    #[test]
+    fn encode_lays_out_a_gene() {
+        let block = Gene::new(ENHANCER, INHIBITOR, 0x0F0F_0F0F).encode();
+        assert_eq!(GENE_BITS, 232);
+        assert_eq!(block.len(), GENE_BITS);
+        assert_eq!(block[0..32].load_le::<u32>(), ENHANCER);
+        assert_eq!(block[32..64].load_le::<u32>(), INHIBITOR);
+        assert_eq!(block[64..72].load_le::<u8>(), START_SEQ);
+        for word in 0..GENE_WORDS {
+            let at = 72 + word * SITE_SIZE;
+            assert_eq!(block[at..at + SITE_SIZE].load_le::<u32>(), 0x0F0F_0F0F, "word {word}");
+        }
+    }
+
+    #[test]
+    fn a_lone_encoded_gene_is_always_found_first() {
+        // The scan starts at the promoter of a lone gene, so whatever else a random
+        // block holds, the first gene found is the one which was encoded.
+        let mut rng = rng();
+        for _ in 0..500 {
+            let gene = Gene::random(&mut rng);
+            assert_eq!(Gene::find_all(&gene.encode())[0], gene);
+        }
+        // Words which hold no alternating bits make a block with no other promoter.
+        for gene in plain_genes() {
+            assert_eq!(Gene::find_all(&gene.encode()), vec![gene]);
+        }
+    }
+
+    #[test]
+    fn concatenated_genes_decode_in_order() {
+        let genes = plain_genes();
+        let mut chromosome = Chromosome::new();
+        for gene in &genes {
+            chromosome.extend_from_bitslice(&gene.encode());
+        }
+        assert_eq!(chromosome.len(), 3 * GENE_BITS);
+        assert_eq!(Gene::find_all(&chromosome), genes);
+
+        let genome = Genome::from_chromosomes(vec![chromosome], vec![], vec![], 1.0);
+        assert_eq!(genome.genes(), genes);
+        assert_eq!(genome.num_genes(), 3);
+    }
+
+    #[test]
+    fn an_alternating_word_can_make_extra_genes() {
+        // Eight alternating bits are a promoter wherever they are, and a promoter
+        // counts if a full coding region follows it. A lone gene has no room for one
+        // in its coding region, but the second gene gives the first one's room.
+        let alternating = Gene::new(ENHANCER, INHIBITOR, 0x5555_5555);
+        let [plain, ..] = plain_genes();
+        assert_eq!(Gene::find_all(&alternating.encode()).len(), 1);
+        let mut chromosome = alternating.encode();
+        chromosome.extend_from_bitslice(&plain.encode());
+        assert!(Gene::find_all(&chromosome).len() > 2);
+    }
+
+    #[test]
+    fn genes_are_listed_chromosome_by_chromosome() {
+        let [a, b, c] = plain_genes();
+        let join = |first: &Gene, second: &Gene| {
+            let mut chromosome = first.encode();
+            chromosome.extend_from_bitslice(&second.encode());
+            chromosome
+        };
+        // Homologous chromosomes have the same length, here two genes each.
+        let genome = Genome::from_chromosomes(
+            vec![join(&a, &b), join(&c, &a)],
+            vec![Gene::new(0, 0, 1)],
+            vec![Gene::new(2, 3, 4)],
+            2.0,
+        );
+        assert_eq!(genome.genes(), vec![a, b, c, a]);
+        assert_eq!(genome.num_genes(), 4);
+        // Nodes are the genes, then the inputs, then the outputs.
+        assert_eq!(weights(&genome).0["N"], 4 + 1 + 1);
+    }
+
+    #[test]
+    fn from_chromosomes_rejects_bad_arguments() {
+        let chromosome = plain_genes()[0].encode();
+        let empty = std::panic::catch_unwind(|| Genome::from_chromosomes(vec![], vec![], vec![], 1.0));
+        assert!(empty.is_err());
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            let chromosome = chromosome.clone();
+            let result =
+                std::panic::catch_unwind(move || Genome::from_chromosomes(vec![chromosome], vec![], vec![], bad));
+            assert!(result.is_err(), "temperature {bad}");
+        }
+        // Zero is a valid temperature, which freezes the network.
+        Genome::from_chromosomes(vec![chromosome], vec![], vec![], 0.0);
+    }
+
+    #[test]
+    fn a_hand_built_genome_round_trips_through_bytes() {
+        let genome = Genome::from_chromosomes(
+            vec![plain_genes()[1].encode()],
+            vec![Gene::new(0, 0, 0x1234_5678), Gene::new(0, 0, 0x8765_4321)],
+            vec![Gene::new(0xDEAD_BEEF, 0, 0)],
+            20.0,
+        );
+        let loaded = Genome::from_bytes(&genome.to_bytes()).unwrap();
+        assert_eq!(loaded, genome);
+        assert_eq!(loaded.phenome(), genome.phenome());
+    }
+
+    #[test]
+    fn weights_follow_the_bit_counts_of_the_sites() {
+        // One gene whose enhancer is the exact complement of its own protein, and
+        // whose inhibitor is the protein itself. Every bit of the protein differs
+        // from the enhancer, which is the strongest match, e^0 = 1, and no bit
+        // differs from the inhibitor, which is the weakest, e^-32.
+        let protein = 0x0F0F_0F0F;
+        let genome = Genome::from_chromosomes(
+            vec![Gene::new(!protein, protein, protein).encode()],
+            vec![],
+            vec![],
+            1.0,
+        );
+        let (json, w) = weights(&genome);
+        assert_eq!(json["N"], 1);
+        assert_eq!(w.len(), 1);
+        assert_eq!((w[0].0, w[0].1), (0, 0));
+        assert!((w[0].2 - (1.0 - (-32.0f64).exp())).abs() < 1e-15, "{w:?}");
+
+        // With an input, N = 2, and a site which is one bit short of the complement
+        // of the input's protein has strength e^-1, divided by N. The inhibitor
+        // is the input's own protein, and is too weak to matter.
+        let input = 0xFFC0_0000u32;
+        let gene = Gene::new(!input ^ 1, input, protein);
+        let genome = Genome::from_chromosomes(vec![gene.encode()], vec![Gene::new(0, 0, input)], vec![], 1.0);
+        let (json, w) = weights(&genome);
+        assert_eq!(json["N"], 2);
+        let (_, _, value) = *w
+            .iter()
+            .find(|(target, source, _)| (*target, *source) == (0, 1))
+            .unwrap();
+        let expected = ((-1.0f64).exp() - (-32.0f64).exp()) / 2.0;
+        assert!((value - expected).abs() < 1e-15, "{value} != {expected}");
     }
 }
