@@ -13,7 +13,7 @@ import argparse
 import json
 import random
 
-from npc_maker.genetics import Genetics
+from npc_maker.genetics import GeneticsServer
 from npc_maker.individual import Individual
 
 
@@ -63,7 +63,7 @@ def _make_phenome(genome):
     ]
 
 
-class PolyploidGenetics(Genetics):
+class PolyploidGenetics(GeneticsServer):
     """Polyploid binary genetics implementation for the NK environment."""
 
     def __init__(self, n):

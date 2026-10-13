@@ -1,14 +1,27 @@
 """
 Base API for implementing NPC Maker genetic services.
 
-Subclasses implement reproduce() to create founders and offspring. The base
-class adapts that method to the Genetics gRPC service and provides main() for
-running the implementation as a listening server.
+# Using Genetic Algorithms
+
+Use the class `GeneticsClient` to start running and interact with a genetics
+server.
+
+# Implementing New Genetic Algorithms
+
+Subclasses implement GeneticsServer.reproduce() to create founders and
+offspring. The base class adapts that method to the Genetics gRPC service and
+provides a `.main()` method for running the implementation as a listening
+server.
 """
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from concurrent import futures
+import os
+import socket
+import subprocess
+import time
+from pathlib import Path
 
 import grpc
 
@@ -16,10 +29,120 @@ from . import genetics_pb2, genetics_pb2_grpc
 from .individual import Individual
 from . import MAX_MESSAGE_SIZE
 
-__all__ = ("Genetics",)
+__all__ = ("GeneticsClient", "GeneticsServer")
 
 
-class Genetics(genetics_pb2_grpc.GeneticsServicer, ABC):
+def _free_address() -> str:
+    """Return a loopback address with an available ephemeral port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return f"127.0.0.1:{sock.getsockname()[1]}"
+
+
+class GeneticsClient:
+    """Start a genetics CLI service and call its reproduction operation.
+
+    Argument ``command`` is the genetics program's CLI invocation. It must be a
+    list of strings, starting with the path to an executable. This class
+    appends ``--listen HOST:PORT`` arguments to the command line. The genetics
+    server will listen on an available loopback port. This class starts the
+    process and waits up to ``timeout`` seconds for the gRPC service to become
+    ready.
+
+    Use the `reproduce()` method to send parent `Individual` objects and get
+    the resulting child. The client owns the subprocess and gRPC channel;
+    call the `.close()` method when finished, or use it as a context manager.
+
+    Usage:
+
+    >>> from npc_maker.genetics import GeneticsClient
+    >>> 
+    >>> with GeneticsClient(["my-genetics-program", "--config", "genes.json"]) as genetics:
+    >>>     child = genetics.reproduce([parent_a, parent_b])
+
+    Args:
+        command: The genetics program invocation, excluding ``--listen``.
+        timeout: Maximum seconds to wait for service startup.
+        cwd: Optional working directory for the genetics process. It is
+            created if it does not already exist.
+
+    Raises:
+        ValueError: If the command is empty or timeout is not positive.
+        RuntimeError: If the service exits during startup or does not become
+            ready before the timeout.
+        OSError: If the command cannot be started.
+    """
+
+    def __init__(self, command: list[str], timeout: float = 30, cwd=None):
+        if not command:
+            raise ValueError("command must not be empty")
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if cwd is not None:
+            cwd = Path(cwd)
+            cwd.mkdir(parents=True, exist_ok=True)
+
+        self.address = _free_address()
+        self.process = None
+        self.channel = grpc.insecure_channel(self.address, options=[
+            ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
+        ])
+        try:
+            self.process = subprocess.Popen(
+                [*command, "--listen", self.address], cwd=cwd)
+            ready = grpc.channel_ready_future(self.channel)
+            deadline = time.monotonic() + timeout
+            while True:
+                if self.process.poll() is not None:
+                    raise RuntimeError(
+                        "genetics service exited during startup "
+                        f"(status {self.process.returncode})")
+                try:
+                    ready.result(timeout=min(0.25, max(0, deadline - time.monotonic())))
+                    break
+                except grpc.FutureTimeoutError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("timed out waiting for genetics service")
+            self.stub = genetics_pb2_grpc.GeneticsStub(self.channel)
+        except BaseException:
+            self.close()
+            raise
+
+    def reproduce(self, parents: Sequence[Individual]) -> Individual:
+        """Ask the genetics service to create a founder or offspring.
+
+        Pass an empty sequence to request a founder. For offspring, pass the
+        parent individuals. gRPC errors from the service are propagated.
+        """
+        response = self.stub.Reproduce(genetics_pb2.ReproduceRequest(
+            parents=[parent.to_proto() for parent in parents]))
+        return Individual.from_proto(response.child)
+
+    def close(self) -> None:
+        """Close the channel and stop and reap the genetics subprocess."""
+        if self.channel is not None:
+            self.channel.close()
+            self.channel = None
+        if self.process is not None:
+            if self.process.poll() is None:
+                self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
+    def __enter__(self):
+        """Return this client for use in a ``with`` block."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Stop the service when leaving a ``with`` block."""
+        self.close()
+
+
+class GeneticsServer(genetics_pb2_grpc.GeneticsServicer, ABC):
     """Base class for a genetic algorithm's gRPC service implementation.
 
     Implement reproduce() to create founders and offspring. An empty parent

@@ -2,7 +2,7 @@ import pytest
 import grpc
 
 from npc_maker import genetics_pb2
-from npc_maker.genetics import Genetics
+from npc_maker.genetics import GeneticsServer
 from npc_maker.individual import Individual
 
 
@@ -18,7 +18,7 @@ class Context:
         raise AbortError(code, details)
 
 
-class ExampleGenetics(Genetics):
+class ExampleGenetics(GeneticsServer):
     def __init__(self, result=None, error=None):
         self.result = result
         self.error = error

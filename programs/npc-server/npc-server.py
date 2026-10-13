@@ -29,7 +29,7 @@ from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
 from npc_maker import evolution_pb2, evolution_pb2_grpc
-from npc_maker import genetics_pb2, genetics_pb2_grpc
+from npc_maker.genetics import GeneticsClient
 from npc_maker import MAX_MESSAGE_SIZE
 from npc_maker.individual import Individual
 
@@ -134,12 +134,9 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
                 self.processes.append(service)
 
             if genetics:
-                port = _free_port()
-                service = ServiceProcess(
-                    genetics, genetics_pb2_grpc.GeneticsStub,
-                    "127.0.0.1", port,
-                    cwd=self.save_dir / f"{body_type}-genetics")
-                self.genetics[body_type] = service.stub
+                service = GeneticsClient(
+                    genetics, cwd=self.save_dir / f"{body_type}-genetics")
+                self.genetics[body_type] = service
                 self.processes.append(service)
 
     def close(self):
@@ -206,11 +203,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             parents = [Individual.from_proto(parent) for parent in response.parents]
 
         if body_type in self.genetics:
-            response = self._call(
-                self.genetics[body_type].Reproduce,
-                genetics_pb2.ReproduceRequest(
-                    parents=[parent.to_proto() for parent in parents]))
-            child = Individual.from_proto(response.child)
+            child = self._call(self.genetics[body_type].reproduce, parents)
         elif parents:
             # No genetic algorithm registered, clone first parent.
             child = Individual.reproduce([parents[0]])
@@ -244,11 +237,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
         # Apply the genetic algorithm.
         if body_type in self.genetics:
-            response = self._call(
-                self.genetics[body_type].Reproduce,
-                genetics_pb2.ReproduceRequest(
-                    parents=[parent.to_proto() for parent in parents]))
-            child = Individual.from_proto(response.child)
+            child = self._call(self.genetics[body_type].reproduce, parents)
         else:
             child = Individual.reproduce([parents[0]])
             child.genome = parents[0].genome
