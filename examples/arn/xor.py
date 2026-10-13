@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Run the XOR environment with the ARN controller.
+"""
+Run the XOR environment with the ARN controller.
 
 Build the ARN programs first with
 ``cargo build --release -p arn_controller -p arn_genetics``.
@@ -35,16 +36,15 @@ def main():
     repo = here.parents[1]
     controller = repo / "target" / "release" / "arn_controller"
     genetics = repo / "target" / "release" / "arn_genetics"
-    missing = [str(program) for program in (controller, genetics)
+    environment = repo / "target" / "release" / "xor"
+    missing = [str(program) for program in (controller, genetics, environment)
                if not program.is_file()]
     if missing:
-        parser.error("ARN programs are not built; run: cargo build --release "
-                     "-p arn_controller -p arn_genetics")
+        parser.error("ARN programs are not built; run: cargo build --release")
 
     config = {
         "name": "XOR with the ARN controller",
-        # "environment": [sys.executable, str(repo / "examples" / "xor" / "xor.py")],
-        "environment": [str(repo / "target" / "release" / "xor")],
+        "environment": [str(environment)],
         "evolution": "npc-evo -p 1000 -r oldest -s ranked-exponential=100 --parents 2".split(),
         "organisms": [{
             "body_type": BODY_TYPE,
