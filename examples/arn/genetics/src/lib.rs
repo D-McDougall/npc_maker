@@ -84,6 +84,7 @@
 
 use bitvec::prelude::*;
 use rand::distr::{Bernoulli, Distribution};
+use rand::seq::SliceRandom;
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +169,52 @@ pub fn crossover_with_rng<R: Rng + ?Sized>(rng: &mut R, chromosomes: &[Chromosom
 
     (0..len)
         .map(|index| chromosomes[rng.random_range(0..chromosomes.len())][index])
+        .collect()
+}
+
+/// Create a chromosome by taking one contiguous chunk from each homologous
+/// chromosome (in random order). Chunk lengths differ by at most one bit when
+/// the chromosome length is not divisible by the number of homologues. Their
+/// boundaries are evenly spaced around the chromosome, with a uniformly
+/// selected phase; the chunk crossing the end wraps around to the beginning.
+///
+/// # Panics
+///
+/// Panics if `chromosomes` is empty or if their lengths differ.
+pub fn crossover_chunk(chromosomes: &[Chromosome]) -> Chromosome {
+    crossover_chunk_with_rng(&mut rand::rng(), chromosomes)
+}
+
+/// Like [`crossover_chunk`], with an explicit source of randomness.
+pub fn crossover_chunk_with_rng<R: Rng + ?Sized>(
+    rng: &mut R,
+    chromosomes: &[Chromosome],
+) -> Chromosome {
+    assert!(!chromosomes.is_empty(), "crossover requires at least one chromosome");
+    let len = chromosomes[0].len();
+    assert!(
+        chromosomes.iter().all(|chromosome| chromosome.len() == len),
+        "crossover chromosomes must have equal lengths"
+    );
+    if len == 0 {
+        return Chromosome::new();
+    }
+
+    let count = chromosomes.len();
+    let average_chunk_len = len / count;
+    let offset = rng.random_range(0..=average_chunk_len);
+    let mut order: Vec<_> = (0..count).collect();
+    order.shuffle(rng);
+
+    (0..len)
+        .map(|index| {
+            // Rotate the index by the offset.
+            let rotated = (index + len - offset) % len;
+            // Scaling the rotated index assigns either floor(B/N) or ceil(B/N)
+            // bits to each chunk.
+            let chunk = ((rotated as u128 * count as u128) / len as u128) as usize;
+            chromosomes[order[chunk]][index]
+        })
         .collect()
 }
 
@@ -347,7 +394,7 @@ impl Genome {
     /// Like [`Genome::gamete`], with an explicit source of randomness.
     pub fn gamete_with_rng<R: Rng + ?Sized>(&self, rng: &mut R, mutation_rate: f64) -> Chromosome {
         assert_mutation_rate(mutation_rate);
-        let mut gamete = crossover_with_rng(rng, &self.chromosomes);
+        let mut gamete = crossover_chunk_with_rng(rng, &self.chromosomes);
         mutate(&mut gamete, rng, mutation_rate);
         gamete
     }
