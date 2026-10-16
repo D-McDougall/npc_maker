@@ -17,7 +17,6 @@ server.
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from concurrent import futures
-import os
 import socket
 import subprocess
 import time
@@ -132,6 +131,8 @@ class GeneticsClient:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+            finally:
+                self.process = None
 
     def __enter__(self):
         """Return this client for use in a ``with`` block."""
@@ -139,6 +140,9 @@ class GeneticsClient:
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Stop the service when leaving a ``with`` block."""
+        self.close()
+
+    def __del__(self):
         self.close()
 
 

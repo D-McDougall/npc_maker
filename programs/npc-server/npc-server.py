@@ -28,7 +28,7 @@ from google.protobuf import json_format
 from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 from npc_maker import environment_pb2, environment_pb2_grpc
 from npc_maker import experiment_pb2
-from npc_maker import evolution_pb2, evolution_pb2_grpc
+from npc_maker.evolution import EvolutionClient
 from npc_maker.genetics import GeneticsClient
 from npc_maker import MAX_MESSAGE_SIZE
 from npc_maker.individual import Individual
@@ -56,38 +56,6 @@ class LocalProcess:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
-
-    def __del__(self):
-        self.close()
-
-
-class ServiceProcess(LocalProcess):
-    """
-    Run a local gRPC service.
-    """
-    def __init__(self, command, stub_class, host, port, cwd=None):
-        # Note: By convention services accept "--listen HOST:PORT".
-        command = [*command, "--listen", f"{host}:{port}"]
-        super().__init__(command, cwd)
-        self.channel = grpc.insecure_channel(f"{host}:{port}",
-            options=[
-                ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
-                ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
-            ],
-        )
-
-        # Block until the subprocess is ready to accept connections
-        try:
-            grpc.channel_ready_future(self.channel).result(timeout=30)
-        except grpc.FutureTimeoutError:
-            self.close()
-            raise RuntimeError(f"gRPC service timeout: {command}")
-
-        self.stub = stub_class(self.channel)
-
-    def close(self):
-        self.channel.close()
-        super().close()
 
     def __del__(self):
         self.close()
@@ -125,12 +93,10 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
             genetics = list(organism.genetics) or list(config.genetics)
 
             if evolution:
-                port = _free_port()
-                service = ServiceProcess(
-                    evolution, evolution_pb2_grpc.EvolutionStub,
-                    "127.0.0.1", port,
+                service = EvolutionClient(
+                    evolution,
                     cwd=self.save_dir / f"{body_type}-evolution")
-                self.evolution[body_type] = service.stub
+                self.evolution[body_type] = service
                 self.processes.append(service)
 
             if genetics:
@@ -180,12 +146,12 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         if self.server is not None:
             self.server.stop(0)
 
-    def _call(self, call, request):
+    def _call(self, call, *args):
         """
         Attempt a gRPC call. Handles errors by logging them and exiting.
         """
         try:
-            return call(request)
+            return call(*args)
         except grpc.RpcError as error:
             self._fatal(error)
             raise
@@ -197,10 +163,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
         parents = []
 
         if body_type in self.evolution:
-            response = self._call(
-                self.evolution[body_type].Spawn,
-                evolution_pb2.SpawnRequest())
-            parents = [Individual.from_proto(parent) for parent in response.parents]
+            parents = self._call(self.evolution[body_type].spawn)
 
         if body_type in self.genetics:
             child = self._call(self.genetics[body_type].reproduce, parents)
@@ -300,9 +263,7 @@ class NpcServer(environment_pb2_grpc.EnvironmentServicer):
 
         # Notify the evolution service.
         if body_type in self.evolution:
-            self._call(
-                self.evolution[body_type].Death,
-                evolution_pb2.DeathRequest(individual=individual.to_proto()))
+            self._call(self.evolution[body_type].death, individual)
 
         # Clean up the deceased individual's save files.
         Individual.delete(path)
