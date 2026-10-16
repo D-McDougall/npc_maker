@@ -255,11 +255,11 @@ impl Evolution {
         }
         // Split the file path from flag arguments, if path was given
         let mut path = None;
-        if let Some(arg0) = args.get(0) {
-            if !arg0.starts_with("-") {
-                path = Some(PathBuf::from(arg0));
-                args.remove(0);
-            }
+        if let Some(arg0) = args.first()
+            && !arg0.starts_with("-")
+        {
+            path = Some(PathBuf::from(arg0));
+            args.remove(0);
         }
         path
     }
@@ -358,7 +358,7 @@ impl Evolution {
     }
     fn load(&mut self, path: PathBuf) -> Result<(), Error> {
         self.path = path;
-        let json = fs::read(&self.get_metadata_path())?;
+        let json = fs::read(self.get_metadata_path())?;
         let metadata: PersistentData = serde_json::from_slice(&json)?;
         self.replacement = metadata.replacement;
         self.selection = metadata.selection;
@@ -556,7 +556,7 @@ impl Evolution {
             }
         }
         // Always save to waiting directory for bookkeeping
-        individual.save(&self.get_waiting_path())?;
+        individual.save(self.get_waiting_path())?;
         self.waiting.push(metadata.clone());
         // Rollover immediately, don't be lazy or wait until the next spawn.
         if self.waiting.len() >= self.population_size {

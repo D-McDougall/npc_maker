@@ -44,10 +44,10 @@ impl ServerOptions {
         let mut this = Self::default();
         let mut index = 1; // Start at 1, arg 0 is the program name
         // Skip optional file path argument
-        if let Some(arg1) = args.get(index) {
-            if !arg1.starts_with("-") {
-                index += 1;
-            }
+        if let Some(arg1) = args.get(index)
+            && !arg1.starts_with("-")
+        {
+            index += 1;
         }
         while let Some(flag) = args.get(index) {
             match flag.as_str() {
