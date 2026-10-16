@@ -189,14 +189,12 @@ class GeneticsServer(genetics_pb2_grpc.GeneticsServicer, ABC):
 
         return genetics_pb2.ReproduceResponse(child=child.to_proto())
 
-    @classmethod
-    def main(cls, listen: str, *args, **kwargs) -> None:
+    def main(self, listen: str) -> None:
         """Run this genetics implementation as a gRPC server.
 
-        listen is a gRPC address such as "127.0.0.1:50051". Additional
-        positional and keyword arguments are passed to the implementation's
-        constructor, supporting algorithms that require configuration.
-        This method blocks until the server is stopped.
+        Call this method on an initialized implementation. ``listen`` is a
+        gRPC address such as "127.0.0.1:50051". This method blocks until the
+        server is stopped.
         """
         if not isinstance(listen, str) or not listen:
             raise ValueError("listen must be a non-empty host:port address")
@@ -206,10 +204,7 @@ class GeneticsServer(genetics_pb2_grpc.GeneticsServicer, ABC):
             ('grpc.max_send_message_length', MAX_MESSAGE_SIZE),
             ('grpc.max_receive_message_length', MAX_MESSAGE_SIZE),
         ])
-        genetics_pb2_grpc.add_GeneticsServicer_to_server(
-            cls(*args, **kwargs),
-            server,
-        )
+        genetics_pb2_grpc.add_GeneticsServicer_to_server(self, server)
 
         # Zero indicates a bind failure; port 0 may request an ephemeral port.
         if server.add_insecure_port(listen) == 0:

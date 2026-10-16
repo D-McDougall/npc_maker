@@ -99,7 +99,7 @@ def main():
     if args.N <= 0:
         parser.error("N must be greater than zero")
 
-    PolyploidGenetics.main(args.listen, args.N)
+    PolyploidGenetics(args.N).main(args.listen)
 
 
 if __name__ == "__main__":

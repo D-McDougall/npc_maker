@@ -124,4 +124,4 @@ def test_reproduce_rejects_invalid_child_from_server(mode):
 if __name__ == "__main__":
     listen_address = sys.argv[-1]
     mode = sys.argv[1]
-    ExampleGenetics.main(listen_address, mode)
+    ExampleGenetics(mode).main(listen_address)
