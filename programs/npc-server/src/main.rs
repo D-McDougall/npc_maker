@@ -16,7 +16,7 @@ use npc_maker::{
 use std::{
     collections::HashMap,
     env, fs,
-    net::{SocketAddr, TcpListener},
+    net::{SocketAddr, TcpListener, ToSocketAddrs},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Arc,
@@ -628,6 +628,14 @@ fn free_port() -> Result<u16, String> {
         .map(|a| a.port())
         .map_err(|e| e.to_string())
 }
+/// Resolve a numeric or hostname listener address to an address suitable for tonic.
+fn resolve_listen_addr(requested: &str) -> Result<SocketAddr, String> {
+    requested
+        .to_socket_addrs()
+        .map_err(|e| format!("invalid listen address {requested:?}: {e}"))?
+        .next()
+        .ok_or_else(|| format!("invalid listen address {requested:?}: no addresses found"))
+}
 /// Keep the command-line usage string in one place for errors and --help.
 fn usage() -> &'static str {
     "Usage: npc-server [-v|--verbose] [--listen HOST:PORT] [--workers NUM] CONFIG SAVE_DIR"
@@ -692,9 +700,7 @@ async fn run() -> Result<(), (i32, String)> {
     // commands and unavailable services fail during startup.
     let state = State::new(config.clone(), save_dir).await.map_err(|e| (5, e))?;
     let requested = listen.unwrap_or_else(|| format!("127.0.0.1:{}", free_port().unwrap_or(0)));
-    let mut addr: SocketAddr = requested
-        .parse()
-        .map_err(|e| (7, format!("invalid listen address: {e}")))?;
+    let mut addr = resolve_listen_addr(&requested).map_err(|e| (7, e))?;
     if addr.port() == 0 {
         addr.set_port(free_port().map_err(|e| (7, e))?);
     }
@@ -732,7 +738,7 @@ async fn run() -> Result<(), (i32, String)> {
                 .max_decoding_message_size(MAX_MESSAGE_SIZE),
         );
     let server = tokio::spawn(service.serve_with_shutdown(addr, shutdown));
-    let bound = format!("{}:{}", addr.ip(), addr.port());
+    let bound = addr.to_string();
     {
         // Start the environment only after the server endpoint is established
         // in configuration, passing it the address that it should connect to.
@@ -763,5 +769,18 @@ async fn run() -> Result<(), (i32, String)> {
         Err((1, "downstream service failure".into()))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_listen_addr;
+
+    #[test]
+    fn resolves_hostname_listen_address() {
+        let addr = resolve_listen_addr("localhost:50051").expect("localhost should resolve");
+
+        assert_eq!(addr.port(), 50051);
+        assert!(addr.ip().is_loopback());
     }
 }
