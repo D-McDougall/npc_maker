@@ -15,11 +15,11 @@ from pathlib import Path
 
 import grpc
 
-from npc_maker.controller import Controller
+from npc_maker.controller import ControllerServer
 from npc_maker import diagnostics_pb2, diagnostics_pb2_grpc
 
 
-class XorController(Controller):
+class XorController(ControllerServer):
     """Minimal controller that returns a logical function of its two inputs."""
 
     def __init__(self, phenome: bytes, function="xor"):
