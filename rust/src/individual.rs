@@ -57,9 +57,9 @@ impl Individual {
     ///
     /// Returns the child.
     ///
-    /// The child's other fields are unset, in particular it does not inherit the
-    /// parents' score, telemetry, epigenome, or extra fields. If the first parent
-    /// has no species then neither does the child.
+    /// The child's other fields are unset, in particular it does not inherit
+    /// the parents' score, telemetry, or epigenome fields. If the first parent
+    /// has no species then neither will the child.
     ///
     /// The caller must set the genome, epigenome, and phenome attributes.
     ///
@@ -329,7 +329,6 @@ mod tests {
                 ascension: Some(5),
                 birth_date: Some(Default::default()),
                 death_date: Some(Default::default()),
-                extra: Some(Default::default()),
             }),
             genome: Some(b"genome".to_vec()),
             epigenome: Some(b"epigenome".to_vec()),
@@ -399,7 +398,6 @@ mod tests {
         assert_eq!(child.ascension, None);
         assert_eq!(child.birth_date, None);
         assert_eq!(child.death_date, None);
-        assert_eq!(child.extra, None);
         // The parent counted the child, and is otherwise unchanged
         assert_eq!(parent_meta.children, Some(4));
         let mut expected = before.metadata().clone();

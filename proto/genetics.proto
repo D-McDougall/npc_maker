@@ -12,27 +12,36 @@ Genomes are treated as opaque binary objects outside of genetic algorithms.
 The _genome_ refers to a complete set of parameters for creating an AI
 agent's control system. Each individual has exactly one immutable genome.
 
-Genomes are converted into "**phenomes**" before transmission to controllers.
+Genomes are converted into _phenomes_ for transmission to controllers.
 This decouples the genetic representation from the control system implementation.
-
+The genetic service is responsible for setting both the genome and phenome.
 */
 service Genetics {
   /*
+  Create a new individual. The genetics service is free to implement any
+  algorithm for creating new genomes. It may ignore the given parents list.
+
+  If given zero parents then the genetics service must create a new founder
+  individual using the initial genetic material. By convention, if one parent
+  is given then it should be asexually reproduced, and if multiple parents are
+  given then they should be sexually reproduced.
   */
   rpc Reproduce(ReproduceRequest) returns (ReproduceResponse);
 }
 
-/*
-List parent Individuals
-
-Each parent must have a genome
-*/
 message ReproduceRequest {
+  /*
+  List of parents to be mated together.
+
+  May contain zero or more Individuals.
+  */
   repeated individual.Individual parents = 1;
 }
 
-/*
-*/
 message ReproduceResponse {
+  /*
+  The returned individual must have a name. All other attributes are optional.
+  By default, the genome, epigenome, and phenome are empty.
+  */
   individual.Individual child = 1;
 }

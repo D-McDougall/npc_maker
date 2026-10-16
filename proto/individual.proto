@@ -18,37 +18,41 @@ binary.
 
 # Lifecycle
 
-There are several pathways to creating individuals, depending on how the
-environment requests them, and whether a genetic algorithm is specified.
+There are several pathways for creating individuals, depending on how the
+environment requests them, and which services are available.
 
 ## Spawn Sequence
 
-1) The environment requests a new individual from the router via
+1) The environment requests a new individual from the npc-server via
 `environment.Environment::Spawn()`.
 
-2) The router requests parents from the evolution service via
-`evolution.Evolution::Spawn()`.
+2) The npc-server requests parents from the evolution service via
+`evolution.Evolution::Spawn()`. If the evolution service is missing then the
+parents default to an empty list, which will request a founder from the
+genetics service.
 
-3) The router forwards the parents to the genetic service via
-`genetics.Genetics::Reproduce()`. The genetic service creates a new Individual
-and returns it to the router.
+3) The npc-server forwards the parents to the genetics service via
+`genetics.Genetics::Reproduce()`. The genetics service creates a new Individual
+and returns it to the npc-server. If the genetics service is missing then the
+first parent is cloned.
 
-4) The router sends the Individual to the environment. The router also keeps a
-copy of the individual locally.
+4) The npc-server sends the Individual to the environment. The npc-server also
+keeps a copy of the individual locally.
 
 ## Mate Sequence
 
 1) The environment requests to mate some individuals via
 `environment.Environment::Mate()`. Parents are specified by name, and the
-router will have copies of the individuals on hand while they are alive in the
-environment.
+npc-server will have copies of the individuals on hand while they are alive and
+in the environment.
 
-2) The router forwards the given parents to the genetic service via
-`genetics.Genetics::Reproduce()`. The genetic service creates a new Individual
-and returns it to the router.
+2) The npc-server forwards the given parents to the genetics service via
+`genetics.Genetics::Reproduce()`. The genetics service creates a new Individual
+and returns it to the npc-server. If the genetics service is missing then the
+first parent is cloned.
 
-3) The router sends the Individual to the environment. The router also keeps a
-copy of the individual locally.
+3) The npc-server sends the Individual to the environment. The npc-server also
+keeps a copy of the individual locally.
 
 ## Replay Sequence
 
@@ -59,38 +63,54 @@ information about using this sequence.
 1) The environment requests a new Individual via either the spawn or mate
 sequence.
 
-2) The router requests an Individual from the evolution service via
-`evolution.Evolution::Spawn()`. The first parent is used, the remaining parents
-are discarded. At least one parent must be returned.
+2) The npc-server requests an Individual from the evolution service via
+`evolution.Evolution::Spawn()`. At least one parent must be returned.
 
-3) The router sends the Individual to the environment. The router also keeps a
+3) The genetics service is missing, so the first parent is cloned and the
+remaining parents are discarded.
+
+4) The npc-server sends the Individual to the environment. The npc-server also keeps a
 copy of the individual locally.
 
 ## Life Sequence
 
 1) The environment requests a new Individual via either the spawn or mate
-sequence. The router may choose to ignore mate requests and return a spawned or
-replayed individual instead.
+sequence. The npc-server may choose to ignore mate requests and return a
+spawned or replayed individual instead.
 
-2) The environment synchronizes their copy of the Individual with the router via
+2) The environment synchronizes their copy of the Individual with the npc-server
+via the RPC:
 * `environment.Environment::Telemetry()`
 * `environment.Environment::Epigenome()`
 * `environment.Environment::Score()`
 
-3) The environment declares the Individual dead via
+3) The environment declares the Individual dead via the RPC:
 `environment.Environment::Death()`.
 
-4) The router sends its copy of the Individual to the evolution service via
-`evolution.Evolution::Death()`.
+4) The npc-server sends its copy of the Individual to the evolution service via
+the RPC: `evolution.Evolution::Death()`.
 
 ## Field Ownership
 
 | Field | Set By | When |
 | ----- | ------ | ---- |
-| `metadata.name` | Genetics | At creation |
-| `metadata.score` |  |  |
-
-
+| `metadata` | Genetics | at creation |
+| `genome` | Genetics | at creation |
+| `epigenome` |  |  |
+| `phenome` | Genetics | at creation |
+| `metadata.name` | Genetics | at creation |
+| `metadata.environment` |  |  |
+| `metadata.body_type` |  |  |
+| `metadata.controller` | npc-server |  |
+| `metadata.score` | Environment | while alive |
+| `metadata.telemetry` | Environment | while alive |
+| `metadata.species` | Genetics | at creation |
+| `metadata.parents` |  |  |
+| `metadata.children` |  |  |
+| `metadata.generation` |  |  |
+| `metadata.ascension` | Evolution | death |
+| `metadata.birth_date` | npc-server | birth |
+| `metadata.death_date` | npc-server | death |
 
 */
 message Individual {
@@ -136,7 +156,7 @@ message Metadata {
   (UUID-4), but technically it can be any string that is universally unique
   among all individuals.
 
-  Name must be a valid file system directory name.
+  This must be a valid file system directory name.
   */
   string name = 1 [
     json_name = "name"
@@ -168,7 +188,7 @@ message Metadata {
 
   Higher is better.
 
-  Unset values are translated to -∞.
+  Unset and NaN values are translated to -∞.
   */
   optional double score = 5 [
     json_name = "score"
@@ -226,7 +246,7 @@ message Metadata {
   /*
   UTC time at which this individual was born.
 
-  This is assigned by the router program, immediately before sending the
+  This is assigned by the npc-server program, immediately before sending the
   individual to the environment.
   */
   optional google.protobuf.Timestamp birth_date = 12 [
@@ -236,17 +256,10 @@ message Metadata {
   /*
   UTC time at which this individual died.
 
-  This is assigned by the router program, immediately after receiving the
+  This is assigned by the npc-server program, immediately after receiving the
   corresponding death message.
   */
   optional google.protobuf.Timestamp death_date = 13 [
     json_name = "death_date"
-  ];
-
-  /*
-  User-defined fields are allowed in the `extra` dictionary.
-  */
-  google.protobuf.Struct extra = 100 [
-    json_name = "extra"
   ];
 }

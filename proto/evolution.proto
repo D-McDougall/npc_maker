@@ -9,9 +9,9 @@ The Evolution service manages a population.
 
 An evolution service receives individuals after they die and is responsible for
 deciding which of those individuals can reproduce. It may implement any
-evolutionary algorithm, including a conventional genetic algorithm, artificial
-selection, speciation, replay of previously successful individuals, or a
-combination of these.
+evolutionary algorithm, including conventional algorithms, artificial
+selection, speciation, elitism, replay of previously successful individuals, or
+a combination of these.
 
 The selected parent Individuals are passed to the Genetics service, which
 creates the child. If the genetic service is missing, then the first parent
@@ -26,14 +26,14 @@ will be cloned into the environment.
 
 3. If one or more parents are returned, the npc-server passes them to the
    Genetics service to create the child. If zero parents are returned, the
-   Genetics service uses the initial genetic material instead.
+   Genetics service uses the initial genetic material instead, which creates
+   a founder individual.
 
 4. While the individual is alive, the environment updates the npc-server's copy
    of the Individual with its current score, telemetry, and epigenome.
 
 5. When the individual dies, the npc-server calls Death() with its final
    Individual record.
-
 */
 service Evolution {
   /*

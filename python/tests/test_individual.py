@@ -148,8 +148,6 @@ def test_save_load_round_trip(tmp_path, make_full_individual):
     assert loaded.birth_date == individual.birth_date
     assert loaded.controller == ["test-ctrl", "--flag"]
     assert dict(loaded.telemetry) == {"temperature": "20", "mood": "ok"}
-    assert loaded.extra["note"] == "héllo ✓"
-    assert loaded.extra["nested"]["flag"] is True
 
 
 def test_metadata_json_is_protobuf_json(tmp_path, make_full_individual):
@@ -167,9 +165,6 @@ def test_metadata_json_is_protobuf_json(tmp_path, make_full_individual):
     assert data["ascension"] == "5"
     assert data["birth_date"] == "2026-10-03T12:30:45.123456Z"
     assert data["death_date"] == "2026-10-03T13:00:00Z"
-    assert data["extra"]["note"] == "héllo ✓"      # Not escaped
-    assert data["extra"]["nested"] == {"flag": True}
-    assert data["extra"]["items"] == [1, "two"]
     # Blobs are not part of the metadata.
     assert not {"genome", "epigenome", "phenome"} & set(data)
 
@@ -177,7 +172,7 @@ def test_metadata_json_is_protobuf_json(tmp_path, make_full_individual):
 def test_metadata_json_omits_unset_fields(tmp_path):
     individual = make()
     data = json.loads((individual.save(tmp_path) / "metadata.json").read_text())
-    assert not {"score", "ascension", "birth_date", "death_date", "parents", "telemetry", "extra"} & set(data)
+    assert not {"score", "ascension", "birth_date", "death_date", "parents", "telemetry"} & set(data)
 
 
 def test_absent_blobs_load_as_empty(tmp_path):
@@ -305,7 +300,7 @@ def test_load_invalid_metadata(tmp_path):
     bad_metadata = (
         b"", b"not json", b"null", b"5", b'"text"', b"[]", b'["name"]',  # Not a JSON object
         b'{"name": 5}', b'{"name": []}', b'{"children": "many"}', b'{"score": "high"}',
-        b'{"name": "x", "unknown_field": 1}',  # Only the "extra" field may contain custom fields
+        b'{"name": "x", "unknown_field": 1}',
         b"\xff\xfe", b"\xef\xbb\xbf{}",  # Not UTF-8, UTF-8 with byte-order-mark
     )
     for bad in bad_metadata:
@@ -377,7 +372,6 @@ def test_reproduce_one_parent(make_full_individual):
     assert child.ascension is None
     assert child.birth_date is None
     assert child.death_date is None
-    assert not child.to_proto().metadata.HasField("extra")
     assert child.genome is None
     assert child.epigenome is None
     assert child.phenome is None

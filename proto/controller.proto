@@ -5,11 +5,11 @@ package controller;
 /*
 The Controller service provides control systems to its environment.
 
-Each controller instance is represented by one bidirectional streaming session.
-The environment sends commands and receives responses over the same stream.
-Commands are processed sequentially, in the order received. The environment may
-send additional commands while earlier commands are still outstanding.
-Responses are correlated with requests by request_id.
+Each controller instance is represented by a bidirectional streaming session
+between an environment and a Controller service. Commands are processed
+sequentially, in the order received. The environment may send additional
+commands while earlier commands are still outstanding. Responses are correlated
+with requests by request_id.
 
 Servicers should accept many simultaneous sessions.
 */

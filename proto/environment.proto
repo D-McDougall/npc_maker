@@ -12,14 +12,14 @@ the Environment service.
 service Environment {
 
   /*
-  Request a new individual from the evolutionary algorithm
+  Request a new individual from the evolutionary algorithm.
   */
   rpc Spawn(SpawnRequest) returns (individual.Individual);
 
   /*
-  Request a new individual by mating individuals together. This requires at
-  least one parent. This accepts more than two parents. All parents must be
-  alive, in this environment, and having the same body_type.
+  Request a new individual be created by mating individuals together. This
+  requires at least one parent. This accepts more than two parents. All parents
+  must be alive, in this environment, and having the same body_type.
   */
   rpc Mate(MateRequest) returns (individual.Individual);
 
@@ -30,12 +30,15 @@ service Environment {
   rpc Score(ScoreRequest) returns (ScoreResponse);
 
   /*
-  The environment associates some extra information with a living individual.
-  The info is kept alongside the individual in perpetuity.
+  Associated environmental information with a living individual.
+  This info is kept alongside the individual in perpetuity.
   */
   rpc Telemetry(TelemetryRequest) returns (TelemetryResponse);
 
   /*
+  Pass through controller information to be associated with a genome. Epigenetic
+  data is kept alongside the genome in perpetuity. The Genetics service may
+  access and propagate this data.
   */
   rpc Epigenome(EpigenomeRequest) returns (EpigenomeResponse);
 
@@ -110,6 +113,8 @@ message EpigenomeResponse {
 }
 
 /*
+Key value pairs are stored in an associative dictionary.
+Duplicate keys are overwritten by the latest entry.
 */
 message KeyValue {
   string key = 1;
