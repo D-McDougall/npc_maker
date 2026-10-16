@@ -32,7 +32,7 @@
   project, then runs `cargo test --workspace`, `pytest python`, and the NK and
   ARN example tests. For focused work, use `cargo test -p <crate>` or
   `PATH="/home/ai/venv/bin:$PATH" venv/bin/pytest python/tests/test_<area>.py`.
-- Run `cargo fmt --all -- --check` before submitting Rust changes. Formatting
+- Run `cargo fmt` before submitting Rust changes. Formatting
   follows `rustfmt.toml` (120-column maximum). There is no configured Python
   formatter or linter; follow the surrounding style.
 

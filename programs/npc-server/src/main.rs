@@ -30,6 +30,19 @@ use tonic::{
 
 type RpcResult<T> = Result<Response<T>, Status>;
 
+/// Time given to a child process to complete its shutdown work.
+const CHILD_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(2);
+
+#[cfg(windows)]
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+#[cfg(windows)]
+const CTRL_BREAK_EVENT: u32 = 1;
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GenerateConsoleCtrlEvent(control_type: u32, process_group_id: u32) -> i32;
+}
+
 /// Owns a child process so every startup path eventually reaps it.
 struct ChildProcess(Child);
 impl ChildProcess {
@@ -41,15 +54,50 @@ impl ChildProcess {
         }
         let mut cmd = Command::new(program);
         cmd.args(args).stdin(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+
+            // CTRL_BREAK_EVENT can target this group without signalling the
+            // server or its other children.
+            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+        }
         if let Some(path) = cwd {
             cmd.current_dir(path);
         }
         let child = cmd.spawn().map_err(|e| format!("starting {program}: {e}"))?;
         Ok(Self(child))
     }
-    /// Stop the process if it is still running, then wait for it to exit.
+    /// Request that the process stop, then kill it only if it ignores the request.
     fn close(&mut self) {
         if self.0.try_wait().ok().flatten().is_none() {
+            // Match Python's Popen.terminate(): SIGTERM lets services flush
+            // state and release resources after npc-server receives Ctrl+C.
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(self.0.id() as libc::pid_t, libc::SIGTERM);
+            }
+            // Console children receive a CTRL_BREAK_EVENT, the Windows
+            // analogue that can be addressed to one process group. It may
+            // fail for a child without a shared console; the hard-kill
+            // fallback below still ensures cleanup.
+            #[cfg(windows)]
+            unsafe {
+                GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, self.0.id());
+            }
+
+            let deadline = Instant::now() + CHILD_SHUTDOWN_GRACE_PERIOD;
+            loop {
+                match self.0.try_wait() {
+                    Ok(Some(_)) => return,
+                    Err(_) => break,
+                    Ok(None) if Instant::now() >= deadline => break,
+                    Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+                }
+            }
+
+            // The platform-specific graceful request either was ignored or
+            // could not be delivered, so force the child to exit now.
             let _ = self.0.kill();
             let _ = self.0.wait();
         }
@@ -59,6 +107,38 @@ impl Drop for ChildProcess {
     /// Keep cleanup reliable when initialization exits early with an error.
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod child_process_tests {
+    use super::ChildProcess;
+    use std::{
+        env, fs, thread,
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn close_allows_a_child_to_handle_sigterm() {
+        let result = env::temp_dir().join(format!(
+            "npc-server-shutdown-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let command = vec![
+            "sh".into(),
+            "-c".into(),
+            format!(
+                "trap 'echo graceful > {} ; exit' TERM; while :; do :; done",
+                result.display()
+            ),
+        ];
+        let mut child = ChildProcess::start(&command, None).unwrap();
+        thread::sleep(Duration::from_millis(10));
+
+        child.close();
+
+        assert_eq!(fs::read_to_string(&result).unwrap().trim(), "graceful");
+        fs::remove_file(result).unwrap();
     }
 }
 

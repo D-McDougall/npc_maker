@@ -214,10 +214,7 @@ pub fn crossover_chunk(chromosomes: &[Chromosome]) -> Chromosome {
 }
 
 /// Like [`crossover_chunk`], with an explicit source of randomness.
-pub fn crossover_chunk_with_rng<R: Rng + ?Sized>(
-    rng: &mut R,
-    chromosomes: &[Chromosome],
-) -> Chromosome {
+pub fn crossover_chunk_with_rng<R: Rng + ?Sized>(rng: &mut R, chromosomes: &[Chromosome]) -> Chromosome {
     assert!(!chromosomes.is_empty(), "crossover requires at least one chromosome");
     let len = chromosomes[0].len();
     assert!(
