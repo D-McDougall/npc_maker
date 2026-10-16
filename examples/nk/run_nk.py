@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from npc_maker.diagnostics import Diagnostics
+from npc_maker.diagnostics import DiagnosticsClient
 
 N                  = 10
 K                  = 4
@@ -97,7 +97,7 @@ def run_nk(n=N, k=K, seed=SEED, death_limit=DEATH_LIMIT, evolution=EVOLUTION):
         )
 
         started = time.monotonic()
-        with Diagnostics(config_file, directory / "server-data",
+        with DiagnosticsClient(config_file, directory / "server-data",
                          timeout=STARTUP_TIMEOUT) as diagnostics:
             print(f"Starting npc-server on {diagnostics.address}", flush=True)
             score_report = _monitor(diagnostics, started, death_limit)

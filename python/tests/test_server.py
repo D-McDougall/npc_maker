@@ -16,7 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from npc_maker.diagnostics import Diagnostics
+from npc_maker.diagnostics import DiagnosticsClient
 from npc_maker.individual import Individual
 
 
@@ -63,7 +63,7 @@ def server_test_inner(server_program):
         config_file = directory / "experiment.json"
         config_file.write_text(json.dumps(config), encoding="utf-8")
 
-        with Diagnostics(
+        with DiagnosticsClient(
             config_file,
             directory / "server-data",
             verbose=True,

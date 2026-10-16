@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from npc_maker.diagnostics import Diagnostics
+from npc_maker.diagnostics import DiagnosticsClient
 
 
 def test_diagnostics_starts_queries_and_stops_server():
@@ -25,7 +25,7 @@ def test_diagnostics_starts_queries_and_stops_server():
         config_file = directory / "experiment.json"
         config_file.write_text(json.dumps(config), encoding="utf-8")
 
-        with Diagnostics(config_file, directory / "server-data") as diagnostics:
+        with DiagnosticsClient(config_file, directory / "server-data") as diagnostics:
             deadline = time.monotonic() + 30
             while not result_file.exists() and time.monotonic() < deadline:
                 assert diagnostics.process.poll() is None

@@ -20,7 +20,7 @@ def _free_address():
         return f"127.0.0.1:{sock.getsockname()[1]}"
 
 
-class Diagnostics:
+class DiagnosticsClient:
     """
     Manage an npc-server process and query its Diagnostics service.
 
